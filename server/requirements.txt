@@ -1,0 +1,11 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+h11==0.14.0
+h2==4.1.0
+httptools==0.6.1
+python-multipart==0.0.6
+pydantic==2.5.2
+aiofiles==23.2.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+watchdog==3.0.0 

@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .markdown-body {
+    @apply prose prose-slate max-w-none;
+  }
+  
+  .markdown-body pre {
+    @apply bg-gray-800 text-white p-4 rounded-lg overflow-x-auto;
+  }
+  
+  .markdown-body code {
+    @apply font-mono text-sm;
+  }
+  
+  .markdown-body img {
+    @apply max-w-full h-auto rounded-lg shadow-lg;
+  }
+}
