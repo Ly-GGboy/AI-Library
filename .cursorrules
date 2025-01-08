@@ -331,3 +331,79 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 ## Implementation Details
 
 我们将按以下步骤详细实施：
+
+# Current Task: PDF Support Development Plan
+
+## Analysis of Current System
+
+### Current Document Handling
+1. File Types:
+   - [X] Markdown (.md) support
+   - [ ] PDF support needed
+   - [X] Image support
+   - [X] Binary file handling infrastructure exists
+
+### Components to Modify
+1. Backend:
+   - DocService: Handles file operations and caching
+   - API Routes: Handles file serving
+   - MIME type detection already implemented
+
+2. Frontend:
+   - MarkdownViewer component for MD files
+   - Need new PDFViewer component
+   - DocView handles document display logic
+
+## Development Plan
+
+### Phase 1: Backend PDF Support
+- [ ] Add PDF file detection in DocService
+- [ ] Update file response handling for PDFs
+- [ ] Add PDF metadata extraction (title, pages, etc.)
+- [ ] Implement PDF caching strategy
+
+### Phase 2: Frontend PDF Viewer
+- [ ] Create PDFViewer Vue component
+- [ ] Integrate PDF.js for rendering
+- [ ] Implement viewer controls (zoom, page navigation)
+- [ ] Add PDF loading states and error handling
+
+### Phase 3: Integration
+- [ ] Update DocView to handle PDF files
+- [ ] Modify document tree to show PDF icons
+- [ ] Add PDF-specific navigation controls
+- [ ] Implement PDF search functionality
+
+### Phase 4: Testing & Optimization
+- [ ] Test PDF loading performance
+- [ ] Implement lazy loading for large PDFs
+- [ ] Add PDF caching in browser
+- [ ] Test mobile responsiveness
+
+## Implementation Steps
+
+1. Backend Changes:
+   ```python
+   # Required changes in doc_service.py
+   - Update get_file_response() for PDF handling
+   - Add PDF metadata extraction
+   - Implement PDF-specific caching
+   ```
+
+2. Frontend Changes:
+   ```typescript
+   # New components needed
+   - PDFViewer.vue
+   - PDFControls.vue
+   - PDFThumbnails.vue (optional)
+   ```
+
+3. Dependencies to Add:
+   - PDF.js for PDF rendering
+   - PDF metadata extraction library for backend
+
+## Progress Tracking
+[ ] Phase 1: Backend PDF Support
+[ ] Phase 2: Frontend PDF Viewer
+[ ] Phase 3: Integration
+[ ] Phase 4: Testing & Optimization
