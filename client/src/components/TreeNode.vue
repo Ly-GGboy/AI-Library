@@ -20,10 +20,11 @@
         <span class="node-name folder-name">{{ node.name }}</span>
       </div>
       <router-link
-        v-else-if="node.type === 'file' && node.path"
+        v-else-if="node.path"
         :to="{ name: 'doc', params: { path: node.path } }"
         class="node-content article"
         :class="{ 'active': isActive }"
+        :title="node.path"
         ref="activeLink"
         @click="$emit('select')"
       >
