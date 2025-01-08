@@ -17,7 +17,26 @@
         />
         <FolderIcon v-if="!expanded" class="w-4 h-4 text-gray-500 flex-shrink-0" />
         <FolderOpenIcon v-else class="w-4 h-4 text-primary-500 flex-shrink-0" />
-        <span class="node-name folder-name">{{ node.name }}</span>
+        <div class="node-name-container">
+          <span 
+            class="node-name folder-name" 
+            :class="{ 'expanded': isNameExpanded }"
+            :title="!isNameExpanded ? node.name : ''"
+          >
+            {{ displayName }}
+          </span>
+          <button 
+            v-if="needsExpansion"
+            class="expand-button"
+            @click="toggleNameExpand"
+            :title="isNameExpanded ? '收起' : '展开'"
+          >
+            <component
+              :is="isNameExpanded ? 'ChevronDoubleUpIcon' : 'ChevronDoubleDownIcon'"
+              class="w-3 h-3"
+            />
+          </button>
+        </div>
       </div>
       <router-link
         v-else-if="node.type === 'file' && node.path"
@@ -28,13 +47,52 @@
         @click="$emit('select')"
       >
         <DocumentTextIcon class="w-4 h-4 flex-shrink-0" :class="isActive ? 'text-primary-500' : 'text-gray-400'" />
-        <span class="node-name article-name" :class="{ 'text-primary-600 font-medium': isActive }">
-          {{ node.name.replace('.md', '') }}
-        </span>
+        <div class="node-name-container">
+          <span 
+            class="node-name article-name" 
+            :class="{ 
+              'text-primary-600 font-medium': isActive,
+              'expanded': isNameExpanded 
+            }"
+            :title="!isNameExpanded ? node.name.replace('.md', '') : ''"
+          >
+            {{ displayName }}
+          </span>
+          <button 
+            v-if="needsExpansion"
+            class="expand-button"
+            @click="toggleNameExpand"
+            :title="isNameExpanded ? '收起' : '展开'"
+          >
+            <component
+              :is="isNameExpanded ? 'ChevronDoubleUpIcon' : 'ChevronDoubleDownIcon'"
+              class="w-3 h-3"
+            />
+          </button>
+        </div>
       </router-link>
       <div v-else class="node-content">
         <DocumentIcon class="w-4 h-4 text-gray-400 flex-shrink-0" />
-        <span class="node-name">{{ node.name }}</span>
+        <div class="node-name-container">
+          <span 
+            class="node-name" 
+            :class="{ 'expanded': isNameExpanded }"
+            :title="!isNameExpanded ? node.name : ''"
+          >
+            {{ displayName }}
+          </span>
+          <button 
+            v-if="needsExpansion"
+            class="expand-button"
+            @click="toggleNameExpand"
+            :title="isNameExpanded ? '收起' : '展开'"
+          >
+            <component
+              :is="isNameExpanded ? 'ChevronDoubleUpIcon' : 'ChevronDoubleDownIcon'"
+              class="w-3 h-3"
+            />
+          </button>
+        </div>
       </div>
 
       <div v-if="expanded && node.children" class="node-children">
@@ -59,7 +117,9 @@ import {
   DocumentTextIcon,
   DocumentIcon,
   FolderIcon,
-  FolderOpenIcon
+  FolderOpenIcon,
+  ChevronDoubleDownIcon,
+  ChevronDoubleUpIcon
 } from '@heroicons/vue/24/outline'
 import { useRoute } from 'vue-router'
 
@@ -207,6 +267,32 @@ onMounted(async () => {
     localStorage.removeItem(storageKey)
   }
 })
+
+// 添加展开状态控制
+const isNameExpanded = ref(false)
+
+// 检查标题是否过长需要展开
+const needsExpansion = computed(() => {
+  const maxLength = 30 // 可以根据实际需求调整
+  return props.node.name.length > maxLength
+})
+
+// 获取显示的标题文本
+const displayName = computed(() => {
+  if (props.node.type === 'file') {
+    const name = props.node.name.replace('.md', '')
+    return isNameExpanded.value ? name : name
+  }
+  return isNameExpanded.value ? props.node.name : props.node.name
+})
+
+// 切换标题展开状态
+const toggleNameExpand = (event: Event) => {
+  if (needsExpansion.value) {
+    event.stopPropagation()
+    isNameExpanded.value = !isNameExpanded.value
+  }
+}
 </script>
 
 <style scoped>
@@ -222,8 +308,9 @@ onMounted(async () => {
 
 .node-content {
   @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer 
-    transition-all duration-200
+    transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
     active:scale-[0.98] touch-pan-y;
+  min-width: 0; /* 确保flex容器可以正确处理溢出 */
 }
 
 .node-content.folder {
@@ -240,20 +327,41 @@ onMounted(async () => {
 }
 
 .node-name {
-  @apply text-gray-700 truncate dark:text-gray-300 min-w-0 flex-1;
+  @apply text-gray-700 dark:text-gray-300 min-w-0 flex-1 cursor-default
+    whitespace-normal break-words leading-relaxed;
+  word-break: break-word;
 }
 
 .folder-name {
-  @apply font-medium text-gray-600 dark:text-gray-300;
+  @apply font-medium text-gray-600 dark:text-gray-300 cursor-pointer;
 }
 
 .article-name {
-  @apply text-gray-500 dark:text-gray-400;
+  @apply text-gray-500 dark:text-gray-400 cursor-pointer;
 }
 
 .node-children {
   @apply pl-4 border-l border-gray-100 ml-2 my-0.5
     dark:border-gray-700;
+}
+
+/* 添加hover效果 */
+.node-name:hover {
+  @apply text-gray-900 dark:text-gray-100;
+}
+
+/* 优化文本溢出显示 */
+.node-content {
+  @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer 
+    transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
+    active:scale-[0.98] touch-pan-y;
+  min-width: 0; /* 确保flex容器可以正确处理溢出 */
+}
+
+/* 确保文本容器可以正确处理溢出 */
+.node-content > div,
+.node-content > a {
+  @apply min-w-0 flex-1;
 }
 
 /* 移动端优化 */
@@ -265,5 +373,55 @@ onMounted(async () => {
   .node-children {
     @apply pl-3 ml-1;
   }
+}
+
+.node-name-container {
+  @apply flex items-center min-w-0 flex-1;
+  max-width: 300px; /* 调整最大宽度 */
+}
+
+.node-name {
+  @apply text-gray-700 dark:text-gray-300 min-w-0 flex-1 cursor-default
+    whitespace-normal break-words leading-relaxed;
+  word-break: break-word;
+}
+
+.node-name.expanded {
+  /* 展开后换行显示 */
+  @apply whitespace-normal break-words;
+  word-break: break-word;
+}
+
+.expand-button {
+  display: none;
+}
+
+.folder-name {
+  @apply font-medium text-gray-600 dark:text-gray-300 cursor-pointer;
+}
+
+.article-name {
+  @apply text-gray-500 dark:text-gray-400 cursor-pointer;
+}
+
+/* 优化展开后的间距 */
+.node-content {
+  @apply flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer 
+    transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
+    active:scale-[0.98] touch-pan-y;
+  min-width: 0;
+}
+
+.node-content.folder {
+  @apply hover:bg-gray-50 dark:hover:bg-gray-800;
+}
+
+.node-content.article {
+  @apply hover:bg-gray-100 ml-2 dark:hover:bg-gray-800;
+}
+
+/* 图标垂直对齐 */
+.node-content > :first-child {
+  @apply mt-1;
 }
 </style> 
