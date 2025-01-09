@@ -72,6 +72,7 @@ const { isDark } = storeToRefs(themeStore)
 const { toggleTheme } = themeStore
 
 onMounted(async () => {
+  await docStore.loadDocTree()  // 先加载文档树
   await docStore.loadRecentDocs()
   
   // 如果有 hash，跳转到对应的目录

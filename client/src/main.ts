@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import '@fortawesome/fontawesome-free/css/all.css'
 
 // 初始化主题
 const theme = localStorage.getItem('theme')

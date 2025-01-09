@@ -67,25 +67,59 @@ renderer.image = (href: string, title: string, text: string) => {
 }
 
 const renderedContent = computed(() => {
-  console.log('MarkdownViewer content:', props.content)
-  if (!props.content) {
-    console.log('No content to render')
-    return ''
+  try {
+    console.log('MarkdownViewer content:', props.content)
+    if (!props.content) {
+      console.log('No content to render')
+      return ''
+    }
+
+    // 预处理 Markdown 内容
+    let processedContent = props.content
+    
+    // 处理相对路径
+    const basePath = getBasePath()
+    if (basePath) {
+      // 替换图片路径
+      processedContent = processedContent.replace(
+        /!\[([^\]]*)\]\((?!http|\/api)(.*?)\)/g,
+        (match, alt, path) => `![${alt}](/api/docs/content/${basePath}${path})`
+      )
+      
+      // 替换链接路径
+      processedContent = processedContent.replace(
+        /\[([^\]]+)\]\((?!http|\/api)(.*?)\)/g,
+        (match, text, path) => `[${text}](/api/docs/content/${basePath}${path})`
+      )
+    }
+
+    const html = marked(processedContent, {
+      gfm: true,
+      breaks: true,
+      renderer,
+      sanitize: false,
+      pedantic: false
+    })
+    
+    console.log('Rendered HTML:', html)
+    return html
+  } catch (error) {
+    console.error('Error rendering markdown:', error)
+    return '<div class="error">Error rendering content</div>'
   }
-  const html = marked(props.content, {
-    gfm: true,
-    breaks: true,
-    renderer
-  })
-  console.log('Rendered HTML:', html)
-  return html
 })
 
-watch(renderedContent, () => {
+// 监听内容变化
+watch(() => props.content, (newContent) => {
+  console.log('Content changed:', newContent)
   nextTick(() => {
-    Prism.highlightAll()
+    try {
+      Prism.highlightAll()
+    } catch (error) {
+      console.error('Error highlighting code:', error)
+    }
   })
-})
+}, { immediate: true })
 
 onMounted(() => {
   Prism.highlightAll()
