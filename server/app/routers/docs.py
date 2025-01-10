@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from typing import List, Dict, Optional
 import os
 import json
@@ -18,18 +18,42 @@ async def get_doc_tree() -> Dict:
 
 @router.get("/content/{path:path}")
 async def get_doc_content(path: str):
-    """获取文档内容或图片"""
+    """获取文档内容或文件"""
     try:
-        # 检查是否是图片或其他二进制文件
-        if not path.endswith('.md'):
-            file_path, mime_type = await doc_service.get_file_response(path)
+        # 获取文件路径和MIME类型
+        file_path, mime_type = await doc_service.get_file_response(path)
+        
+        # 如果是Markdown文件，返回内容
+        if path.endswith('.md'):
+            return await doc_service.get_doc_content(path)
+            
+        # 如果是PDF文件，返回文件和正确的Content-Type
+        if mime_type == 'application/pdf':
             return FileResponse(
                 file_path,
                 media_type=mime_type,
-                filename=os.path.basename(file_path)
+                filename=os.path.basename(file_path),
+                headers={
+                    "Content-Disposition": "inline",  # 在浏览器中直接显示
+                    "Accept-Ranges": "bytes"  # 支持范围请求，用于大文件加载
+                }
             )
-        
-        # 如果是 Markdown 文件，返回内容
+            
+        # 其他类型文件
+        return FileResponse(
+            file_path,
+            media_type=mime_type,
+            filename=os.path.basename(file_path)
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/metadata/{path:path}")
+async def get_doc_metadata(path: str):
+    """获取文档元数据，包括PDF的页数等信息"""
+    try:
         return await doc_service.get_doc_content(path)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -50,4 +74,4 @@ async def get_breadcrumb(path: str) -> List[Dict]:
     try:
         return await doc_service.get_breadcrumb(path)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))

@@ -45,11 +45,20 @@
       </aside>
 
       <article class="article">
-        <MarkdownViewer
-          :content="currentDoc?.content || ''"
-          :loading="loading"
-          :error="error"
-        />
+        <template v-if="isPDF">
+          <PDFViewer
+            :path="route.params.path as string"
+            :loading="loading"
+            :error="error"
+          />
+        </template>
+        <template v-else>
+          <MarkdownViewer
+            :content="currentDoc?.content || ''"
+            :loading="loading"
+            :error="error"
+          />
+        </template>
         
         <div class="doc-navigation">
           <router-link
@@ -91,6 +100,7 @@ import { useThemeStore } from '../stores/theme'
 import { HomeIcon, ChevronRightIcon, ChevronLeftIcon, SunIcon, MoonIcon } from '@heroicons/vue/24/outline'
 import DocTree from '../components/DocTree.vue'
 import MarkdownViewer from '../components/MarkdownViewer.vue'
+import PDFViewer from '../components/PDFViewer.vue'
 import { storeToRefs } from 'pinia'
 
 const route = useRoute()
@@ -110,9 +120,10 @@ const loadContent = async () => {
 
 // 查找当前文档在文档树中的位置
 const findCurrentDocPosition = () => {
-  if (!docTree.value || !currentDoc.value) return null
+  if (!docTree.value || !currentDoc.value) return []
   
   const findInTree = (node: any, parent: any[] = []): any[] | null => {
+    if (!node) return null
     if (node.path === currentDoc.value?.path) {
       return parent
     }
@@ -125,16 +136,20 @@ const findCurrentDocPosition = () => {
     return null
   }
   
-  return findInTree(docTree.value)
+  const result = findInTree(docTree.value)
+  return result || []
 }
 
 // 计算上一篇和下一篇文档
 const navigation = computed(() => {
   const position = findCurrentDocPosition()
-  if (!position) return { prevDoc: null, nextDoc: null }
+  if (!position || position.length === 0) return { prevDoc: null, nextDoc: null }
   
   const lastItem = position[position.length - 1]
+  if (!lastItem) return { prevDoc: null, nextDoc: null }
+  
   const parentNode = position.length > 1 ? position[position.length - 2].node : docTree.value
+  if (!parentNode || !parentNode.children) return { prevDoc: null, nextDoc: null }
   
   let prev = null
   let next = null
@@ -144,10 +159,10 @@ const navigation = computed(() => {
     // 在同级查找上一篇
     let prevNode = parentNode.children[lastItem.index - 1]
     // 如果上一个是目录，找其最后一个文档
-    while (prevNode.children && prevNode.children.length > 0) {
+    while (prevNode && prevNode.children && prevNode.children.length > 0) {
       prevNode = prevNode.children[prevNode.children.length - 1]
     }
-    if (prevNode.type === 'file') prev = prevNode
+    if (prevNode && prevNode.type === 'file') prev = prevNode
   }
   
   // 查找下一篇
@@ -155,10 +170,10 @@ const navigation = computed(() => {
     // 在同级查找下一篇
     let nextNode = parentNode.children[lastItem.index + 1]
     // 如果下一个是目录，找其第一个文档
-    while (nextNode.children && nextNode.children.length > 0) {
+    while (nextNode && nextNode.children && nextNode.children.length > 0) {
       nextNode = nextNode.children[0]
     }
-    if (nextNode.type === 'file') next = nextNode
+    if (nextNode && nextNode.type === 'file') next = nextNode
   }
   
   return {
@@ -169,6 +184,12 @@ const navigation = computed(() => {
 
 const prevDoc = computed(() => navigation.value.prevDoc)
 const nextDoc = computed(() => navigation.value.nextDoc)
+
+// 判断当前文档是否为PDF
+const isPDF = computed(() => {
+  const path = route.params.path as string
+  return path.toLowerCase().endsWith('.pdf')
+})
 
 onMounted(loadContent)
 
@@ -295,4 +316,4 @@ watch(() => route.params.path, loadContent)
     width: 100%;
   }
 }
-</style> 
+</style>

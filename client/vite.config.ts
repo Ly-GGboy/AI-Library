@@ -6,6 +6,24 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
+  optimizeDeps: {
+    include: ['pdfjs-dist/build/pdf.worker.entry'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          pdfjs: ['pdfjs-dist'],
+          'pdfjs-worker': ['pdfjs-dist/build/pdf.worker.entry'],
+        },
+      },
+    },
+  },
   server: {
     https: {
       key: fs.readFileSync(path.resolve(__dirname, '../server/key.pem')),

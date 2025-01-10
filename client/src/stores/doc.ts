@@ -32,14 +32,24 @@ export const useDocStore = defineStore('doc', () => {
       loading.value = true
       error.value = null
       console.log('Loading doc content for path:', path)
+      
+      // 重置当前文档，避免显示旧内容
+      currentDoc.value = null
+      
       const doc = await docApi.getDocContent(path)
       console.log('Loaded doc content:', doc)
+      
+      if (!doc) {
+        throw new Error('Document not found')
+      }
+      
       currentDoc.value = doc
       breadcrumb.value = await docApi.getBreadcrumb(path)
       console.log('Current doc after loading:', currentDoc.value)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load document'
       console.error('Failed to load document:', e)
+      currentDoc.value = null
     } finally {
       loading.value = false
     }
@@ -60,6 +70,19 @@ export const useDocStore = defineStore('doc', () => {
       loading.value = false
     }
   }
+
+  // 初始化 store
+  async function init() {
+    try {
+      await loadDocTree()
+      await loadRecentDocs()
+    } catch (e) {
+      console.error('Failed to initialize doc store:', e)
+    }
+  }
+
+  // 自动初始化
+  init()
 
   return {
     docTree,

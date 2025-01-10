@@ -29,7 +29,26 @@
             :class="{ 'active': isCurrentArticle(article.path) }"
           >
             <DocumentTextIcon class="w-4 h-4" :class="isCurrentArticle(article.path) ? 'text-primary-500' : 'text-gray-500'" />
-            <span class="article-name">{{ article.name }}</span>
+            <div class="article-name-container">
+              <span 
+                class="article-name" 
+                :class="{ 'expanded': expandedArticles.has(article.path) }"
+                :title="!expandedArticles.has(article.path) ? article.name : ''"
+              >
+                {{ article.name }}
+              </span>
+              <button 
+                v-if="needsExpansion(article.name)"
+                class="expand-button"
+                @click.prevent="toggleArticleExpand(article.path)"
+                :title="expandedArticles.has(article.path) ? '收起' : '展开'"
+              >
+                <component
+                  :is="expandedArticles.has(article.path) ? 'ChevronDoubleUpIcon' : 'ChevronDoubleDownIcon'"
+                  class="w-3 h-3"
+                />
+              </button>
+            </div>
           </router-link>
         </div>
       </div>
@@ -58,7 +77,7 @@ import TreeNode from './TreeNode.vue'
 import MobileNav from './MobileNav.vue'
 import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
-import { DocumentTextIcon } from '@heroicons/vue/24/outline'
+import { DocumentTextIcon, ChevronDoubleDownIcon, ChevronDoubleUpIcon } from '@heroicons/vue/24/outline'
 
 const route = useRoute()
 const docStore = useDocStore()
@@ -153,6 +172,24 @@ watch(
   { immediate: true }
 )
 
+// 添加展开状态控制
+const expandedArticles = ref(new Set<string>())
+
+// 检查标题是否过长需要展开
+const needsExpansion = (name: string) => {
+  const maxLength = 30 // 可以根据实际需求调整
+  return name.length > maxLength
+}
+
+// 切换标题展开状态
+const toggleArticleExpand = (path: string) => {
+  if (expandedArticles.value.has(path)) {
+    expandedArticles.value.delete(path)
+  } else {
+    expandedArticles.value.add(path)
+  }
+}
+
 onMounted(async () => {
   if (!docTree.value) {
     await docStore.loadDocTree()
@@ -226,9 +263,10 @@ onMounted(async () => {
 }
 
 .recent-article-link {
-  @apply flex items-center gap-2 px-2 py-1 rounded 
+  @apply flex items-start gap-2 px-2 py-1.5 rounded 
     hover:bg-gray-100 transition-colors duration-200
     dark:hover:bg-gray-800;
+  min-width: 0;
 }
 
 .recent-article-link.active {
@@ -236,8 +274,38 @@ onMounted(async () => {
     dark:bg-primary-900/30 dark:hover:bg-primary-900/40;
 }
 
+.article-name-container {
+  @apply flex items-center min-w-0 flex-1;
+  max-width: 300px; /* 调整最大宽度 */
+}
+
 .article-name {
-  @apply text-sm text-gray-700 truncate dark:text-gray-300;
+  @apply text-sm text-gray-700 dark:text-gray-300 min-w-0 flex-1
+    whitespace-normal break-words leading-relaxed;
+  word-break: break-word;
+}
+
+.article-name.expanded {
+  /* 展开后换行显示 */
+  @apply whitespace-normal break-words;
+  word-break: break-word;
+}
+
+.expand-button {
+  display: none;
+}
+
+/* 优化换行后的间距 */
+.recent-article-link {
+  @apply flex items-start gap-2 px-2 py-1.5 rounded 
+    hover:bg-gray-100 transition-colors duration-200
+    dark:hover:bg-gray-800;
+  min-width: 0;
+}
+
+/* 图标垂直对齐 */
+.recent-article-link > :first-child {
+  @apply mt-1;
 }
 
 .tree-container {
