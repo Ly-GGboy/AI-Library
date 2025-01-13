@@ -68,9 +68,7 @@ renderer.image = (href: string, title: string, text: string) => {
 
 const renderedContent = computed(() => {
   try {
-    console.log('MarkdownViewer content:', props.content)
     if (!props.content) {
-      console.log('No content to render')
       return ''
     }
 
@@ -101,7 +99,6 @@ const renderedContent = computed(() => {
       pedantic: false
     })
     
-    console.log('Rendered HTML:', html)
     return html
   } catch (error) {
     console.error('Error rendering markdown:', error)
@@ -110,8 +107,7 @@ const renderedContent = computed(() => {
 })
 
 // 监听内容变化
-watch(() => props.content, (newContent) => {
-  console.log('Content changed:', newContent)
+watch(() => props.content, () => {
   nextTick(() => {
     try {
       Prism.highlightAll()

@@ -407,3 +407,15 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 [ ] Phase 2: Frontend PDF Viewer
 [ ] Phase 3: Integration
 [ ] Phase 4: Testing & Optimization
+
+## PDF Viewer Improvements
+- When implementing PDF viewer functionality, ensure bookmark selection is handled properly with proper state management
+- Implement proper navigation controls with clear visual feedback
+- Handle PDF loading states and errors gracefully
+- Test PDF viewer functionality across different document sizes and types
+
+## Markdown Processing
+- When splitting markdown files, maintain proper header hierarchy
+- Preserve metadata and front matter when processing markdown files
+- Handle special characters and formatting during file operations
+- Implement proper error handling for file operations

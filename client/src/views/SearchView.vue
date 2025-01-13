@@ -84,10 +84,8 @@ const { toggleTheme } = themeStore
 
 const performSearch = async () => {
   const query = route.query.q as string
-  console.log('Performing search with query:', query)
   if (query) {
     await searchStore.search(query)
-    console.log('Search results:', searchResults.value)
   }
 }
 

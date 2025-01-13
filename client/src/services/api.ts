@@ -12,7 +12,6 @@ const api = axios.create({
 // Add response interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    console.log(`API Request [${config.method?.toUpperCase()}] ${config.url}:`, config)
     return config
   },
   (error) => {
@@ -23,14 +22,10 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response [${response.status}] [${response.config.url}]:`, response.data)
     return response
   },
   (error) => {
-    console.error(`API Error [${error.config?.url}]:`, error)
-    if (error.response) {
-      console.error('Error Response:', error.response.data)
-    }
+    console.error('API Response Error:', error)
     return Promise.reject(error)
   }
 )
@@ -75,9 +70,7 @@ export const docApi = {
 
   // 获取文档内容
   getDocContent: async (path: string) => {
-    console.log('Fetching doc content for path:', path)
     const response = await api.get<DocContent>(`/docs/content/${path}`)
-    console.log('Raw API response:', response)
     return response.data
   },
 

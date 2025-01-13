@@ -2,97 +2,56 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { docApi, type DocTree, type DocContent, type Breadcrumb } from '../services/api'
 
-export const useDocStore = defineStore('doc', () => {
-  const docTree = ref<DocTree | null>(null)
-  const currentDoc = ref<DocContent | null>(null)
-  const breadcrumb = ref<Breadcrumb[]>([])
-  const recentDocs = ref<DocContent[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+export const useDocStore = defineStore('doc', {
+  state: () => ({
+    docTree: null as DocTree | null,
+    currentDoc: null as DocContent | null,
+    recentDocs: [] as DocContent[],
+    loading: false,
+    error: null as string | null
+  }),
 
-  // 加载文档树
-  async function loadDocTree() {
-    try {
-      loading.value = true
-      error.value = null
-      const result = await docApi.getDocTree()
-      console.log('Loaded doc tree:', result)
-      docTree.value = result
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load document tree'
-      console.error('Failed to load document tree:', e)
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // 加载文档内容
-  async function loadDocContent(path: string) {
-    try {
-      loading.value = true
-      error.value = null
-      console.log('Loading doc content for path:', path)
-      
-      // 重置当前文档，避免显示旧内容
-      currentDoc.value = null
-      
-      const doc = await docApi.getDocContent(path)
-      console.log('Loaded doc content:', doc)
-      
-      if (!doc) {
-        throw new Error('Document not found')
+  actions: {
+    async loadDocTree() {
+      this.loading = true
+      this.error = null
+      try {
+        const result = await docApi.getDocTree()
+        this.docTree = result
+      } catch (err) {
+        console.error('Error loading doc tree:', err)
+        this.error = err instanceof Error ? err.message : '加载文档树失败'
+      } finally {
+        this.loading = false
       }
-      
-      currentDoc.value = doc
-      breadcrumb.value = await docApi.getBreadcrumb(path)
-      console.log('Current doc after loading:', currentDoc.value)
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load document'
-      console.error('Failed to load document:', e)
-      currentDoc.value = null
-    } finally {
-      loading.value = false
+    },
+
+    async loadDocContent(path: string) {
+      this.loading = true
+      this.error = null
+      try {
+        const doc = await docApi.getDocContent(path)
+        this.currentDoc = doc
+      } catch (err) {
+        console.error('Error loading doc content:', err)
+        this.error = err instanceof Error ? err.message : '加载文档内容失败'
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async loadRecentDocs() {
+      this.loading = true
+      this.error = null
+      try {
+        const result = await docApi.getRecentDocs()
+        this.recentDocs = result
+      } catch (err) {
+        console.error('Error loading recent docs:', err)
+        this.error = err instanceof Error ? err.message : '加载最近文档失败'
+      } finally {
+        this.loading = false
+      }
     }
-  }
-
-  // 加载最近文档
-  async function loadRecentDocs(limit: number = 10) {
-    try {
-      loading.value = true
-      error.value = null
-      const result = await docApi.getRecentDocs(limit)
-      console.log('Loaded recent docs:', result)
-      recentDocs.value = result
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to load recent documents'
-      console.error('Failed to load recent documents:', e)
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // 初始化 store
-  async function init() {
-    try {
-      await loadDocTree()
-      await loadRecentDocs()
-    } catch (e) {
-      console.error('Failed to initialize doc store:', e)
-    }
-  }
-
-  // 自动初始化
-  init()
-
-  return {
-    docTree,
-    currentDoc,
-    breadcrumb,
-    recentDocs,
-    loading,
-    error,
-    loadDocTree,
-    loadDocContent,
-    loadRecentDocs
   }
 }) 

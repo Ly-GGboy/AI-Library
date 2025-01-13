@@ -25,6 +25,13 @@
           >
             {{ displayName }}
           </span>
+          <span 
+            class="count-badge" 
+            v-if="articleCount > 0"
+            :title="`${articleCount} ${props.node.type === 'file' ? '节' : '篇'}`"
+          >
+            {{ articleCount }}
+          </span>
           <button 
             v-if="needsExpansion"
             class="expand-button"
@@ -59,6 +66,13 @@
           >
             {{ displayName }}
           </span>
+          <span 
+            class="count-badge" 
+            v-if="articleCount > 0"
+            :title="`${articleCount} ${props.node.type === 'file' ? '节' : '篇'}`"
+          >
+            {{ articleCount }}
+          </span>
           <button 
             v-if="needsExpansion"
             class="expand-button"
@@ -82,6 +96,13 @@
           >
             {{ displayName }}
           </span>
+          <span 
+            class="count-badge" 
+            v-if="articleCount > 0"
+            :title="`${articleCount} ${props.node.type === 'file' ? '节' : '篇'}`"
+          >
+            {{ articleCount }}
+          </span>
           <button 
             v-if="needsExpansion"
             class="expand-button"
@@ -96,7 +117,7 @@
         </div>
       </div>
 
-      <div v-if="expanded && node.children" class="node-children">
+      <div v-if="expanded && node.children" :class="['node-children', getIndentClass]">
         <TreeNode
           v-for="child in node.children"
           :key="child.path || child.name"
@@ -294,6 +315,56 @@ const toggleNameExpand = (event: Event) => {
     isNameExpanded.value = !isNameExpanded.value
   }
 }
+
+// 修改计算缩进的函数，使用动态递减的缩进值
+const getNodeLevel = (node: DocTree): number => {
+  let level = 0;
+  let current = node;
+  while (current.parent) {
+    level++;
+    current = current.parent;
+  }
+  return level;
+}
+
+const getIndentClass = computed(() => {
+  const level = getNodeLevel(props.node);
+  return `indent-level-${Math.min(level, 5)}`; // 最多支持5级缩进
+});
+
+// 修改计算文章和章节数的函数
+const isArticleFile = (name: string | undefined): boolean => {
+  return Boolean(name && (name.endsWith('.md') || name.endsWith('.pdf')));
+}
+
+const getArticleCount = (node: DocTree): number => {
+  if (!node.children) return 0;
+  return node.children.reduce((count, child) => {
+    if (isArticleFile(child.name)) {
+      return count + 1;
+    }
+    return count + getArticleCount(child);
+  }, 0);
+}
+
+const getSectionCount = (node: DocTree): number => {
+  if (!node.children) return 0;
+  // 计算直接子节点中的markdown和pdf文件数量
+  return node.children.filter(child => isArticleFile(child.name)).length;
+}
+
+// 修改计算属性
+const articleCount = computed(() => {
+  // 如果是文件夹，显示其下的文章文件总数
+  if (props.node.children) {
+    return getArticleCount(props.node);
+  }
+  // 如果是文章文件，显示其子章节数
+  if (isArticleFile(props.node.name)) {
+    return getSectionCount(props.node);
+  }
+  return 0;
+});
 </script>
 
 <style scoped>
@@ -301,17 +372,21 @@ const toggleNameExpand = (event: Event) => {
   @apply text-sm;
 }
 
-/* 确保父容器可以滚动 */
+/* 修改滚动容器的样式 */
 :deep(.tree-container) {
-  @apply overflow-y-auto h-[calc(100vh-4rem)];
+  @apply overflow-y-auto;
+  height: 100%; /* 改用100%高度而不是固定高度 */
   scroll-behavior: smooth;
+  position: sticky; /* 添加sticky定位 */
+  top: 0;
 }
 
+/* 确保内容容器可以正确滚动 */
 .node-content {
-  @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer 
+  @apply flex items-start gap-2 px-2 py-1.5 rounded cursor-pointer 
     transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
-    active:scale-[0.98] touch-pan-y;
-  min-width: 0; /* 确保flex容器可以正确处理溢出 */
+    active:scale-[0.98] touch-pan-y relative; /* 添加relative定位 */
+  min-width: 0;
 }
 
 .node-content.folder {
@@ -342,8 +417,29 @@ const toggleNameExpand = (event: Event) => {
 }
 
 .node-children {
-  @apply pl-4 border-l border-gray-100 ml-2 my-0.5
-    dark:border-gray-700;
+  @apply border-l border-gray-100 my-0.5 dark:border-gray-700;
+  margin-left: 0.5rem;
+  will-change: transform; /* 添加硬件加速 */
+}
+
+.node-children :deep(.indent-level-1) {
+  padding-left: 1rem;
+}
+
+.node-children :deep(.indent-level-2) {
+  padding-left: 0.875rem;
+}
+
+.node-children :deep(.indent-level-3) {
+  padding-left: 0.75rem;
+}
+
+.node-children :deep(.indent-level-4) {
+  padding-left: 0.625rem;
+}
+
+.node-children :deep(.indent-level-5) {
+  padding-left: 0.5rem;
 }
 
 /* 添加hover效果 */
@@ -377,18 +473,20 @@ const toggleNameExpand = (event: Event) => {
 }
 
 .node-name-container {
-  @apply flex items-center min-w-0 flex-1;
-  max-width: 300px; /* 调整最大宽度 */
+  @apply flex items-center min-w-0 flex-1 gap-1;
+  max-width: 420px;
+  position: relative; /* 添加relative定位 */
+  z-index: 1; /* 确保内容在滚动时保持可见 */
 }
 
 .node-name {
   @apply text-gray-700 dark:text-gray-300 min-w-0 flex-1 cursor-default
     whitespace-normal break-words leading-relaxed;
   word-break: break-word;
+  padding-right: 4px;
 }
 
 .node-name.expanded {
-  /* 展开后换行显示 */
   @apply whitespace-normal break-words;
   word-break: break-word;
 }
@@ -418,11 +516,27 @@ const toggleNameExpand = (event: Event) => {
 }
 
 .node-content.article {
-  @apply hover:bg-gray-100 ml-2 dark:hover:bg-gray-800;
+  @apply hover:bg-gray-100 dark:hover:bg-gray-800;
+  margin-left: 0.375rem; /* 减小文章的缩进 */
 }
 
 /* 图标垂直对齐 */
 .node-content > :first-child {
   @apply mt-1;
+}
+
+.count-badge {
+  @apply text-[10px] leading-[14px] px-1 rounded-full bg-gray-100 text-gray-500 ml-auto flex-shrink-0 
+    dark:bg-gray-800/60 dark:text-gray-400 min-w-[16px] h-[16px] inline-flex items-center justify-center self-start mt-1;
+  font-feature-settings: "tnum";
+}
+
+.node-content:hover .count-badge {
+  @apply bg-gray-200 dark:bg-gray-700/60;
+}
+
+.node-content.active .count-badge {
+  @apply bg-primary-100/70 text-primary-600
+    dark:bg-primary-900/30 dark:text-primary-400;
 }
 </style> 

@@ -193,7 +193,15 @@ const isPDF = computed(() => {
 
 onMounted(loadContent)
 
-watch(() => route.params.path, loadContent)
+watch(() => route.params.path, async (path) => {
+  if (path) {
+    try {
+      await docStore.loadDocContent(path as string)
+    } catch (err) {
+      console.error('Error loading document:', err)
+    }
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
