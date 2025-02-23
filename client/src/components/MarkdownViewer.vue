@@ -44,6 +44,8 @@ const renderer = new marked.Renderer()
 
 // 重写图片渲染方法
 renderer.image = (href: string, title: string, text: string) => {
+  console.log('Rendering image:', { href, title, text })
+  
   // 如果已经是完整的 URL，直接使用
   if (href && href.startsWith('http')) {
     // do nothing
@@ -63,7 +65,11 @@ renderer.image = (href: string, title: string, text: string) => {
     const encodedPath = imagePath.split('/').map(part => encodeURIComponent(part)).join('/')
     href = `/api/docs/content/${encodedPath}`  // 使用相对路径
   }
-  return `<img src="${href}" alt="${text}"${title ? ` title="${title}"` : ''} class="markdown-image" loading="lazy">`
+
+  // 始终返回 img 标签，不再检查文件扩展名
+  const result = `<img src="${href}" alt="${text}"${title ? ` title="${title}"` : ''} class="markdown-image" loading="lazy">`
+  console.log('Generated img tag:', result)
+  return result
 }
 
 const renderedContent = computed(() => {
@@ -75,29 +81,57 @@ const renderedContent = computed(() => {
     // 预处理 Markdown 内容
     let processedContent = props.content
     
+    console.log('Original content:', processedContent)
+    
     // 处理相对路径
     const basePath = getBasePath()
+    console.log('Base path:', basePath)
+    
     if (basePath) {
-      // 替换图片路径
+      // 替换图片路径 - 修改正则表达式以匹配更多格式
       processedContent = processedContent.replace(
-        /!\[([^\]]*)\]\((?!http|\/api)(.*?)\)/g,
-        (match, alt, path) => `![${alt}](/api/docs/content/${basePath}${path})`
+        /!\[(.*?)\]\((.*?)\)/g,  // 修改正则以匹配所有图片语法
+        (match, alt, path) => {
+          console.log('Found image:', { match, alt, path })
+          // 如果路径已经是完整URL或API路径，直接使用
+          if (path.startsWith('http') || path.startsWith('/api/')) {
+            return match
+          }
+          // 处理相对路径
+          const imagePath = path.startsWith('images/') 
+            ? `${basePath}${path}`
+            : `${basePath}${path}`
+          const encodedPath = imagePath.split('/').map(part => encodeURIComponent(part)).join('/')
+          const result = `![${alt}](/api/docs/content/${encodedPath})`
+          console.log('Processed to:', result)
+          return result
+        }
       )
       
       // 替换链接路径
       processedContent = processedContent.replace(
-        /\[([^\]]+)\]\((?!http|\/api)(.*?)\)/g,
-        (match, text, path) => `[${text}](/api/docs/content/${basePath}${path})`
+        /(?<!!)\[([^\]]+)\]\((?!http|\/api)(.*?)\)/g,  // 修改正则以排除图片语法
+        (match, text, path) => {
+          console.log('Found link:', { match, text, path })
+          const result = `[${text}](/api/docs/content/${basePath}${path})`
+          console.log('Processed to:', result)
+          return result
+        }
       )
     }
 
+    console.log('Final processed content:', processedContent)
+
+    // 使用marked处理Markdown
     const html = marked(processedContent, {
       gfm: true,
       breaks: true,
       renderer,
-      sanitize: false,
       pedantic: false
     })
+    
+    // 检查生成的HTML
+    console.log('Generated HTML:', html)
     
     return html
   } catch (error) {

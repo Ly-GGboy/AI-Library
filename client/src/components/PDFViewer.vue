@@ -11,6 +11,7 @@
               <div class="book-cover"></div>
             </div>
           </div>
+          <div class="loading-text">正在加载文档...</div>
         </div>
         <div v-if="error" class="error-overlay">
           {{ error }}
@@ -68,9 +69,10 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
 import * as pdfjsLib from 'pdfjs-dist'
+import { GlobalWorkerOptions } from 'pdfjs-dist'
 
-// 设置 PDF.js worker 使用本地文件
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf/pdf.worker.min.mjs'
+// 设置 worker 路径
+GlobalWorkerOptions.workerSrc = '/pdf/pdf.worker.min.mjs'
 
 const props = defineProps<{
   path: string
@@ -1359,6 +1361,15 @@ canvas {
 
 .sidebar-toggle:hover .toggle-text {
   opacity: 1;
+}
+
+.loading-text {
+  margin-top: 2rem;
+  font-size: 1rem;
+  color: v-bind('isDarkMode ? "var(--dark-text-primary)" : "var(--light-text-primary)"');
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+  opacity: 0.8;
 }
 </style>
 

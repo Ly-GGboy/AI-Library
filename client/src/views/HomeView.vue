@@ -3,6 +3,14 @@
     <header class="header dark:bg-gray-800">
       <div class="header-content">
         <h1 class="title dark:text-gray-100">文档中心</h1>
+        <a 
+          href="https://frp6.mmszxc.xin:18925" 
+          target="_blank" 
+          class="backup-link"
+          title="访问速度不佳可访问此地址"
+        >
+          备用地址
+        </a>
         <button
           @click="toggleTheme"
           class="theme-toggle ml-auto"
@@ -138,6 +146,12 @@ const findNodeByPath = (node: DocTreeType, path: string): DocTreeType | null => 
 
 .title {
   @apply text-2xl font-bold text-gray-900;
+}
+
+.backup-link {
+  @apply ml-4 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300;
+  @apply px-3 py-1 rounded-full bg-primary-50 hover:bg-primary-100 dark:bg-primary-900/30 dark:hover:bg-primary-900/40;
+  @apply transition-colors duration-200;
 }
 
 .theme-toggle {

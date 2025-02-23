@@ -12,7 +12,7 @@ app = FastAPI(
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://ailibrary.space", "https://localhost:5173"],
+    allow_origins=["https://ailibrary.space", "https://localhost:5173","https://frp6.mmszxc.xin:18925",],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

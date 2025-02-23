@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000,
+  timeout: 100000,
   maxRedirects: 5,
   validateStatus: (status) => {
     return status >= 200 && status < 400

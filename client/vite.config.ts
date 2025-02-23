@@ -9,20 +9,20 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist/build/pdf.js'),
     },
   },
   optimizeDeps: {
-    include: ['pdfjs-dist/build/pdf.worker.entry'],
+    include: ['pdfjs-dist/build/pdf']
   },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
-          pdfjs: ['pdfjs-dist'],
-          'pdfjs-worker': ['pdfjs-dist/build/pdf.worker.entry'],
-        },
-      },
-    },
+          pdfjs: ['pdfjs-dist/build/pdf']
+        }
+      }
+    }
   },
   server: {
     https: {
@@ -31,7 +31,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://localhost:8000',
+        target: 'https://frp6.mmszxc.xin:18926/',
         secure: false,  // 因为我们用的是自签名证书
         changeOrigin: true,
         ws: true,  // 支持 WebSocket

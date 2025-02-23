@@ -50,6 +50,9 @@
             :path="route.params.path as string"
             :loading="loading"
             :error="error"
+            :prev-doc="prevDoc"
+            :next-doc="nextDoc"
+            @navigate="handleNavigate"
           />
         </template>
         <template v-else>
@@ -60,7 +63,7 @@
           />
         </template>
         
-        <div class="doc-navigation">
+        <div v-if="!isPDF" class="doc-navigation">
           <router-link
             v-if="prevDoc"
             :to="{ name: 'doc', params: { path: prevDoc.path } }"
@@ -94,7 +97,7 @@
 
 <script setup lang="ts">
 import { onMounted, watch, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
 import { useThemeStore } from '../stores/theme'
 import { HomeIcon, ChevronRightIcon, ChevronLeftIcon, SunIcon, MoonIcon } from '@heroicons/vue/24/outline'
@@ -104,82 +107,288 @@ import PDFViewer from '../components/PDFViewer.vue'
 import { storeToRefs } from 'pinia'
 
 const route = useRoute()
+const router = useRouter()
 const docStore = useDocStore()
 const themeStore = useThemeStore()
-const { currentDoc, breadcrumb, loading, error, docTree } = storeToRefs(docStore)
+const { currentDoc, loading, error, docTree } = storeToRefs(docStore)
 const { isDark } = storeToRefs(themeStore)
+
+// 计算面包屑
+const breadcrumb = computed(() => {
+  if (!currentDoc.value?.path) return []
+  const parts = currentDoc.value.path.split('/')
+  return parts.map((part, index) => ({
+    name: part,
+    path: parts.slice(0, index + 1).join('/')
+  }))
+})
 
 const loadContent = async () => {
   const path = route.params.path as string
   console.log('DocView: Loading content for path:', path)
   if (path) {
-    await docStore.loadDocContent(path)
-    console.log('DocView: Content loaded, currentDoc:', currentDoc.value)
+    try {
+      if (path.toLowerCase().endsWith('.pdf')) {
+        // PDF 文件不需要加载内容，直接设置当前文档路径
+        docStore.$patch({
+          currentDoc: { path, name: path.split('/').pop() || '' },
+          loading: false,
+          error: null
+        })
+      } else {
+        await docStore.loadDocContent(path)
+      }
+      console.log('DocView: Content loaded, currentDoc:', currentDoc.value)
+    } catch (err) {
+      console.error('Error loading content:', err)
+    }
   }
 }
 
-// 查找当前文档在文档树中的位置
+// 优化查找当前文档在文档树中的位置的函数
 const findCurrentDocPosition = () => {
-  if (!docTree.value || !currentDoc.value) return []
+  if (!docTree.value || !currentDoc.value) {
+    console.log('findCurrentDocPosition: docTree or currentDoc is null', {
+      docTree: docTree.value,
+      currentDoc: currentDoc.value
+    })
+    return []
+  }
   
-  const findInTree = (node: any, parent: any[] = []): any[] | null => {
+  // 打印完整的文档树结构
+  console.log('Document Tree Structure:', JSON.stringify(docTree.value, null, 2))
+  console.log('Current Doc Path:', currentDoc.value.path)
+  
+  const normalizedCurrentPath = currentDoc.value.path.replace(/\\/g, '/')
+  console.log('Normalized Current Path:', normalizedCurrentPath)
+  
+  const findInTree = (node: any, parent: any[] = [], level: number = 0): any[] | null => {
     if (!node) return null
-    if (node.path === currentDoc.value?.path) {
-      return parent
+    
+    const indent = '  '.repeat(level)
+    const nodePath = node.path?.replace(/\\/g, '/')
+    const nodeName = node.name || ''
+    
+    console.log(`${indent}Checking node:`, {
+      name: nodeName,
+      type: node.type,
+      path: nodePath,
+      hasChildren: !!node.children?.length,
+      childrenCount: node.children?.length || 0,
+      hasItems: !!node.items?.length,
+      itemsCount: node.items?.length || 0,
+      level
+    })
+    
+    // 如果是文件且路径匹配（放宽匹配条件）
+    const isMatch = nodePath === normalizedCurrentPath || 
+                   (node.type !== 'dir' && nodeName && normalizedCurrentPath.endsWith(nodeName))
+    
+    if (isMatch) {
+      console.log(`${indent}Found matching file:`, {
+        path: nodePath,
+        name: nodeName,
+        level,
+        parentChain: parent.map(p => p.node.name)
+      })
+      
+      // 修改返回值结构，确保包含正确的父节点和索引
+      return [
+        ...parent,
+        { 
+          node,
+          index: parent.length > 0 ? parent[parent.length - 1].index : 0
+        }
+      ]
     }
-    if (node.children) {
-      for (let i = 0; i < node.children.length; i++) {
-        const result = findInTree(node.children[i], [...parent, { node: node.children[i], index: i }])
-        if (result) return result
+    
+    // 递归搜索所有可能的子节点
+    const searchChildren = (items: any[], itemType: string) => {
+      for (let i = 0; i < items.length; i++) {
+        const child = items[i]
+        console.log(`${indent}Searching ${itemType} [${i}]:`, child.name || 'unnamed')
+        
+        const result = findInTree(
+          child,
+          [...parent, { node, index: i }],
+          level + 1
+        )
+        
+        if (result) {
+          console.log(`${indent}Found result in ${itemType}:`, {
+            childName: child.name || 'unnamed',
+            index: i,
+            level: level + 1
+          })
+          return result
+        }
       }
+      return null
     }
+    
+    // 搜索 children
+    if (node.children?.length) {
+      const result = searchChildren(node.children, 'children')
+      if (result) return result
+    }
+    
+    // 搜索 items
+    if (node.items?.length) {
+      const result = searchChildren(node.items, 'items')
+      if (result) return result
+    }
+    
     return null
   }
   
   const result = findInTree(docTree.value)
+  console.log('Search result:', {
+    found: !!result,
+    resultLength: result?.length || 0,
+    path: result ? result[result.length - 1]?.node?.path : null,
+    chain: result ? result.map(p => ({ name: p.node.name, index: p.index })) : []
+  })
+  
   return result || []
 }
 
-// 计算上一篇和下一篇文档
+// 优化导航计算逻辑
 const navigation = computed(() => {
   const position = findCurrentDocPosition()
-  if (!position || position.length === 0) return { prevDoc: null, nextDoc: null }
+  console.log('Navigation: starting with position:', {
+    positionLength: position.length,
+    positionChain: position.map(p => ({
+      name: p.node.name || 'unnamed',
+      index: p.index
+    }))
+  })
   
-  const lastItem = position[position.length - 1]
-  if (!lastItem) return { prevDoc: null, nextDoc: null }
-  
-  const parentNode = position.length > 1 ? position[position.length - 2].node : docTree.value
-  if (!parentNode || !parentNode.children) return { prevDoc: null, nextDoc: null }
-  
-  let prev = null
-  let next = null
-  
-  // 查找上一篇
-  if (lastItem.index > 0) {
-    // 在同级查找上一篇
-    let prevNode = parentNode.children[lastItem.index - 1]
-    // 如果上一个是目录，找其最后一个文档
-    while (prevNode && prevNode.children && prevNode.children.length > 0) {
-      prevNode = prevNode.children[prevNode.children.length - 1]
+  if (!position.length) {
+    console.log('Navigation: no position found, returning null')
+    return { prevDoc: null, nextDoc: null }
+  }
+
+  const findPrevDoc = (node: any, level: number = 0): any => {
+    if (!node) return null
+    
+    const indent = '  '.repeat(level)
+    console.log(`${indent}Finding prev doc for:`, {
+      name: node.name || 'unnamed',
+      type: node.type,
+      path: node.path,
+      level
+    })
+    
+    // 如果是文件，直接返回
+    if (node.type !== 'dir') {
+      console.log(`${indent}Found file node:`, node.path)
+      return node
     }
-    if (prevNode && prevNode.type === 'file') prev = prevNode
-  }
-  
-  // 查找下一篇
-  if (lastItem.index < parentNode.children.length - 1) {
-    // 在同级查找下一篇
-    let nextNode = parentNode.children[lastItem.index + 1]
-    // 如果下一个是目录，找其第一个文档
-    while (nextNode && nextNode.children && nextNode.children.length > 0) {
-      nextNode = nextNode.children[0]
+    
+    const items = node.children || node.items
+    if (items?.length) {
+      console.log(`${indent}Searching in ${items.length} children/items`)
+      return findPrevDoc(items[items.length - 1], level + 1)
     }
-    if (nextNode && nextNode.type === 'file') next = nextNode
+    
+    return null
   }
+
+  const findNextDoc = (node: any, level: number = 0): any => {
+    if (!node) return null
+    
+    const indent = '  '.repeat(level)
+    console.log(`${indent}Finding next doc for:`, {
+      name: node.name || 'unnamed',
+      type: node.type,
+      path: node.path,
+      level
+    })
+    
+    // 如果是文件，直接返回
+    if (node.type !== 'dir') {
+      console.log(`${indent}Found file node:`, node.path)
+      return node
+    }
+    
+    const items = node.children || node.items
+    if (items?.length) {
+      console.log(`${indent}Searching in ${items.length} children/items`)
+      return findNextDoc(items[0], level + 1)
+    }
+    
+    return null
+  }
+
+  const findSiblingDoc = (parentNode: any, currentIndex: number, direction: 'prev' | 'next'): any => {
+    const items = parentNode?.children || parentNode?.items
+    
+    console.log('Finding sibling doc:', {
+      parentName: parentNode?.name || 'unnamed',
+      currentIndex,
+      direction,
+      itemsCount: items?.length || 0
+    })
+    
+    if (!items?.length) {
+      console.log('No children/items in parent node')
+      return null
+    }
+    
+    const siblingIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1
+    console.log('Looking for sibling:', {
+      direction,
+      siblingIndex,
+      maxIndex: items.length - 1
+    })
+    
+    if (siblingIndex < 0 || siblingIndex >= items.length) {
+      console.log('Sibling index out of bounds')
+      return null
+    }
+    
+    const sibling = items[siblingIndex]
+    if (!sibling) {
+      console.log('No sibling found')
+      return null
+    }
+    
+    console.log('Found sibling:', {
+      name: sibling.name || 'unnamed',
+      type: sibling.type,
+      path: sibling.path
+    })
+    
+    return direction === 'prev' ? findPrevDoc(sibling) : findNextDoc(sibling)
+  }
+
+  // 获取当前文档的父节点和索引
+  const lastPosition = position[position.length - 1]
+  const parentPosition = position[position.length - 2]
   
-  return {
-    prevDoc: prev,
-    nextDoc: next
-  }
+  const parentNode = parentPosition?.node || docTree.value
+  const currentIndex = lastPosition?.index
+
+  console.log('Current position info:', {
+    currentPath: currentDoc.value?.path,
+    parentName: parentNode?.name || 'root',
+    currentIndex,
+    positionLength: position.length,
+    parentChildren: parentNode?.children?.map(c => c.name || 'unnamed') || []
+  })
+
+  // 查找上一篇和下一篇
+  const prevDoc = findSiblingDoc(parentNode, currentIndex, 'prev')
+  const nextDoc = findSiblingDoc(parentNode, currentIndex, 'next')
+
+  console.log('Found navigation docs:', {
+    prev: prevDoc?.path,
+    next: nextDoc?.path,
+    prevName: prevDoc?.name,
+    nextName: nextDoc?.name
+  })
+
+  return { prevDoc, nextDoc }
 })
 
 const prevDoc = computed(() => navigation.value.prevDoc)
@@ -191,12 +400,26 @@ const isPDF = computed(() => {
   return path.toLowerCase().endsWith('.pdf')
 })
 
+// 添加导航处理函数
+const handleNavigate = (path: string) => {
+  router.push({ name: 'doc', params: { path } })
+}
+
 onMounted(loadContent)
 
 watch(() => route.params.path, async (path) => {
   if (path) {
     try {
-      await docStore.loadDocContent(path as string)
+      if (path.toString().toLowerCase().endsWith('.pdf')) {
+        // PDF 文件不需要加载内容，直接设置当前文档路径
+        docStore.$patch({
+          currentDoc: { path: path.toString(), name: path.toString().split('/').pop() || '' },
+          loading: false,
+          error: null
+        })
+      } else {
+        await docStore.loadDocContent(path.toString())
+      }
     } catch (err) {
       console.error('Error loading document:', err)
     }
