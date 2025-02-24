@@ -1,0 +1,272 @@
+/* 沉浸式阅读模式样式 */
+:root {
+  --reading-content-width: 90%;
+  --reading-max-width: 1400px;
+  --reading-font-size: 16px;
+  --reading-line-height: 1.6;
+  --reading-paragraph-spacing: 1.2rem;
+  --reading-margin-size: 2rem;
+  
+  /* 护眼模式颜色变量 */
+  --sepia-bg: #f5f1e6;
+  --sepia-text: #444444;
+  --sepia-link: #6b5f4e;
+  --sepia-border: rgba(107, 95, 78, 0.2);
+  --sepia-blockquote-bg: rgba(107, 95, 78, 0.05);
+}
+
+/* 沉浸式阅读模式的全局样式 */
+.immersive-reading {
+  @apply min-h-screen;
+}
+
+/* 隐藏非必要UI元素 */
+.immersive-reading .doc-tree,
+.immersive-reading .breadcrumb,
+.immersive-reading .sidebar {
+  display: none !important;
+}
+
+/* 重置文章布局 */
+.immersive-reading .article {
+  margin-left: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0 !important;
+}
+
+/* 导航样式优化 */
+.immersive-reading .doc-navigation {
+  width: var(--reading-content-width);
+  max-width: var(--reading-max-width);
+  margin: 2rem auto;
+  padding: var(--reading-margin-size);
+  border-top: 1px solid var(--border-color);
+}
+
+.immersive-reading .doc-navigation a {
+  font-size: var(--reading-font-size);
+  padding: 1rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.immersive-reading .doc-navigation a:hover {
+  background: rgba(var(--primary-color), 0.1);
+}
+
+/* 深色模式下的导航样式 */
+.dark .immersive-reading .doc-navigation {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 护眼模式下的导航样式 */
+.sepia .immersive-reading .doc-navigation {
+  border-color: var(--sepia-border);
+}
+
+/* 内容区域样式 */
+.immersive-reading .markdown-viewer,
+.immersive-reading .pdf-viewer {
+  width: var(--reading-content-width);
+  max-width: var(--reading-max-width);
+  margin: 2rem auto;
+  padding: var(--reading-margin-size);
+}
+
+/* 直接应用到内容元素 */
+.immersive-reading .markdown-body {
+  font-size: var(--reading-font-size) !important;
+  line-height: var(--reading-line-height) !important;
+}
+
+.immersive-reading .markdown-body p {
+  margin-bottom: var(--reading-paragraph-spacing);
+  font-size: var(--reading-font-size) !important;
+  line-height: var(--reading-line-height) !important;
+}
+
+/* 确保其他文本元素也遵循字体大小设置 */
+.immersive-reading .markdown-body li,
+.immersive-reading .markdown-body td,
+.immersive-reading .markdown-body th,
+.immersive-reading .markdown-body blockquote {
+  font-size: var(--reading-font-size) !important;
+  line-height: var(--reading-line-height) !important;
+}
+
+/* 标题字体大小相对调整 */
+.immersive-reading .markdown-body h1 {
+  font-size: calc(var(--reading-font-size) * 2) !important;
+  line-height: 1.3 !important;
+}
+
+.immersive-reading .markdown-body h2 {
+  font-size: calc(var(--reading-font-size) * 1.7) !important;
+  line-height: 1.35 !important;
+}
+
+.immersive-reading .markdown-body h3 {
+  font-size: calc(var(--reading-font-size) * 1.4) !important;
+  line-height: 1.4 !important;
+}
+
+.immersive-reading .markdown-body h4 {
+  font-size: calc(var(--reading-font-size) * 1.2) !important;
+  line-height: 1.45 !important;
+}
+
+.immersive-reading .markdown-body h5,
+.immersive-reading .markdown-body h6 {
+  font-size: calc(var(--reading-font-size) * 1.1) !important;
+  line-height: 1.5 !important;
+}
+
+/* 代码块字体大小调整 */
+.immersive-reading .markdown-body pre,
+.immersive-reading .markdown-body code {
+  font-size: calc(var(--reading-font-size) * 0.9) !important;
+  line-height: calc(var(--reading-line-height) * 1.1) !important;
+}
+
+/* 优化大屏显示 */
+@media (min-width: 1920px) {
+  :root {
+    --reading-content-width: 85%;
+    --reading-max-width: 1600px;
+  }
+  
+  .immersive-reading .markdown-viewer,
+  .immersive-reading .pdf-viewer {
+    font-size: calc(var(--reading-font-size) * 1.1);
+  }
+}
+
+@media (min-width: 2560px) {
+  :root {
+    --reading-content-width: 80%;
+    --reading-max-width: 1800px;
+  }
+  
+  .immersive-reading .markdown-viewer,
+  .immersive-reading .pdf-viewer {
+    font-size: calc(var(--reading-font-size) * 1.2);
+  }
+}
+
+@media (min-width: 3440px) {
+  :root {
+    --reading-content-width: 75%;
+    --reading-max-width: 2000px;
+  }
+  
+  .immersive-reading .markdown-viewer,
+  .immersive-reading .pdf-viewer {
+    font-size: calc(var(--reading-font-size) * 1.3);
+  }
+}
+
+/* 图片优化 */
+.immersive-reading img {
+  max-width: 100%;
+  height: auto;
+  margin: 2rem auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 代码块优化 */
+.immersive-reading pre {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border-radius: 8px;
+  font-size: 0.95em;
+  line-height: 1.5;
+  background: var(--code-bg);
+}
+
+/* 列表优化 */
+.immersive-reading ul,
+.immersive-reading ol {
+  padding-left: 2em;
+  margin: 1em 0;
+}
+
+/* 引用块优化 */
+.immersive-reading blockquote {
+  margin: 2rem 0;
+  padding: 1rem 2rem;
+  border-left: 4px solid;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* 表格优化 */
+.immersive-reading table {
+  margin: 2rem 0;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.immersive-reading th,
+.immersive-reading td {
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* 深色模式适配 */
+.dark .immersive-reading {
+  background: var(--dark-bg);
+  color: var(--dark-text);
+}
+
+.dark .immersive-reading img {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dark .immersive-reading blockquote {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dark .immersive-reading th,
+.dark .immersive-reading td {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 护眼模式 */
+.sepia .immersive-reading {
+  background: var(--sepia-bg);
+  color: var(--sepia-text);
+}
+
+.sepia .immersive-reading img {
+  filter: sepia(10%) brightness(0.98);
+  box-shadow: 0 2px 12px var(--sepia-border);
+}
+
+.sepia .immersive-reading a {
+  color: var(--sepia-link);
+}
+
+.sepia .immersive-reading blockquote {
+  background: var(--sepia-blockquote-bg);
+  border-left-color: var(--sepia-border);
+}
+
+.sepia .immersive-reading pre {
+  background: white;
+  border: 1px solid var(--sepia-border);
+}
+
+.sepia .immersive-reading th,
+.sepia .immersive-reading td {
+  border-color: var(--sepia-border);
+}
+
+.sepia .immersive-reading h1,
+.sepia .immersive-reading h2,
+.sepia .immersive-reading h3,
+.sepia .immersive-reading h4,
+.sepia .immersive-reading h5,
+.sepia .immersive-reading h6 {
+  color: #54483e;
+} 
