@@ -1,0 +1,132 @@
+/* 沉浸式阅读模式样式 */
+:root {
+  --reading-content-width: 70%;
+  --reading-font-size: 16px;
+  --reading-line-height: 1.6;
+  --reading-paragraph-spacing: 1.2rem;
+  --reading-margin-size: 2rem;
+}
+
+/* 沉浸式阅读模式的全局样式 */
+.immersive-reading {
+  /* 隐藏非必要UI元素 */
+  .doc-tree,
+  .header,
+  .footer {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  /* 内容区域样式 */
+  .markdown-viewer,
+  .pdf-viewer {
+    max-width: var(--reading-content-width);
+    margin: 0 auto;
+    padding: var(--reading-margin-size);
+    font-size: var(--reading-font-size);
+    line-height: var(--reading-line-height);
+
+    /* 段落间距 */
+    p {
+      margin-bottom: var(--reading-paragraph-spacing);
+    }
+
+    /* 优化大屏显示 */
+    @media (min-width: 1920px) {
+      /* 24-27寸屏幕 */
+      max-width: min(var(--reading-content-width), 1200px);
+      font-size: calc(var(--reading-font-size) * 1.1);
+    }
+
+    @media (min-width: 2560px) {
+      /* 32寸及以上屏幕 */
+      max-width: min(var(--reading-content-width), 1400px);
+      font-size: calc(var(--reading-font-size) * 1.2);
+    }
+
+    @media (min-width: 3440px) {
+      /* 40寸及以上超宽屏 */
+      max-width: min(var(--reading-content-width), 1600px);
+      font-size: calc(var(--reading-font-size) * 1.3);
+    }
+  }
+
+  /* 图片优化 */
+  img {
+    max-width: 100%;
+    height: auto;
+    margin: 2rem auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  /* 代码块优化 */
+  pre {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    border-radius: 8px;
+    font-size: 0.95em;
+    line-height: 1.5;
+  }
+
+  /* 标题优化 */
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 2em;
+    margin-bottom: 1em;
+    line-height: 1.3;
+  }
+
+  /* 列表优化 */
+  ul, ol {
+    padding-left: 2em;
+    margin: 1em 0;
+  }
+
+  /* 引用块优化 */
+  blockquote {
+    margin: 2rem 0;
+    padding: 1rem 2rem;
+    border-left: 4px solid;
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  /* 表格优化 */
+  table {
+    margin: 2rem 0;
+    width: 100%;
+    border-collapse: collapse;
+    
+    th, td {
+      padding: 0.75rem 1rem;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+  }
+}
+
+/* 深色模式适配 */
+.dark .immersive-reading {
+  img {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  blockquote {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  table {
+    th, td {
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+  }
+}
+
+/* 护眼模式 */
+.sepia .immersive-reading {
+  background: #f4f1ea;
+  color: #5c4b37;
+
+  img {
+    filter: sepia(20%);
+  }
+} 

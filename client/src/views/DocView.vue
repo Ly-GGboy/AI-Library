@@ -29,14 +29,6 @@
           </router-link>
         </li>
       </ol>
-      <button
-        class="theme-toggle"
-        @click="themeStore.toggleTheme"
-        :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
-      >
-        <SunIcon v-if="isDark" class="theme-icon" />
-        <MoonIcon v-else class="theme-icon" />
-      </button>
     </nav>
 
     <main class="main">
@@ -45,50 +37,47 @@
       </aside>
 
       <article class="article">
-        <template v-if="isPDF">
-          <PDFViewer
-            :path="route.params.path as string"
-            :loading="loading"
-            :error="error"
-            :prev-doc="prevDoc"
-            :next-doc="nextDoc"
-            @navigate="handleNavigate"
-          />
-        </template>
-        <template v-else>
-          <MarkdownViewer
-            :content="currentDoc?.content || ''"
-            :loading="loading"
-            :error="error"
-          />
-        </template>
+        <ImmersiveReader>
+          <div v-if="loading" class="loading">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+          </div>
+          <div v-else-if="error" class="error">
+            {{ error }}
+          </div>
+          <div v-else-if="currentDoc">
+            <MarkdownViewer 
+              v-if="!isPDFDoc" 
+              :content="currentDoc.content || ''" 
+              :loading="loading" 
+              :error="error"
+            />
+            <PDFViewer 
+              v-else
+              :path="currentDoc.path"
+            />
+          </div>
+          <div v-else class="no-content">
+            未找到文档内容
+          </div>
+        </ImmersiveReader>
         
-        <div v-if="!isPDF" class="doc-navigation">
+        <div v-if="currentDoc && !isPDFDoc" class="doc-navigation">
           <router-link
             v-if="prevDoc"
             :to="{ name: 'doc', params: { path: prevDoc.path } }"
-            class="nav-link prev"
+            class="prev-link"
           >
-            <ChevronLeftIcon class="nav-icon" />
-            <div class="nav-content">
-              <span class="nav-label">上一篇</span>
-              <span class="nav-title">{{ prevDoc.name }}</span>
-            </div>
+            <ChevronLeftIcon class="w-5 h-5" />
+            <span>{{ prevDoc.name }}</span>
           </router-link>
-          <div v-else class="nav-placeholder"></div>
-
           <router-link
             v-if="nextDoc"
             :to="{ name: 'doc', params: { path: nextDoc.path } }"
-            class="nav-link next"
+            class="next-link"
           >
-            <div class="nav-content">
-              <span class="nav-label">下一篇</span>
-              <span class="nav-title">{{ nextDoc.name }}</span>
-            </div>
-            <ChevronRightIcon class="nav-icon" />
+            <span>{{ nextDoc.name }}</span>
+            <ChevronRightIcon class="w-5 h-5" />
           </router-link>
-          <div v-else class="nav-placeholder"></div>
         </div>
       </article>
     </main>
@@ -99,19 +88,18 @@
 import { onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
-import { useThemeStore } from '../stores/theme'
-import { HomeIcon, ChevronRightIcon, ChevronLeftIcon, SunIcon, MoonIcon } from '@heroicons/vue/24/outline'
+import { HomeIcon, ChevronRightIcon, ChevronLeftIcon } from '@heroicons/vue/24/outline'
 import DocTree from '../components/DocTree.vue'
 import MarkdownViewer from '../components/MarkdownViewer.vue'
 import PDFViewer from '../components/PDFViewer.vue'
+import ImmersiveReader from '../components/ImmersiveReader.vue'
 import { storeToRefs } from 'pinia'
+import type { DocContent } from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
 const docStore = useDocStore()
-const themeStore = useThemeStore()
 const { currentDoc, loading, error, docTree } = storeToRefs(docStore)
-const { isDark } = storeToRefs(themeStore)
 
 // 计算面包屑
 const breadcrumb = computed(() => {
@@ -123,15 +111,29 @@ const breadcrumb = computed(() => {
   }))
 })
 
+// 判断当前文档是否为PDF
+const isPDFDoc = computed(() => {
+  return currentDoc.value?.name ? currentDoc.value.name.toLowerCase().endsWith('.pdf') : false
+})
+
+// 修改loadContent函数
 const loadContent = async () => {
   const path = route.params.path as string
   console.log('DocView: Loading content for path:', path)
   if (path) {
     try {
+      docStore.$patch({ loading: true, error: null })
+      
       if (path.toLowerCase().endsWith('.pdf')) {
         // PDF 文件不需要加载内容，直接设置当前文档路径
+        const pdfDoc: DocContent = {
+          path,
+          name: path.split('/').pop() || '',
+          content: '',
+          last_modified: new Date().toISOString()
+        }
         docStore.$patch({
-          currentDoc: { path, name: path.split('/').pop() || '' },
+          currentDoc: pdfDoc,
           loading: false,
           error: null
         })
@@ -141,6 +143,10 @@ const loadContent = async () => {
       console.log('DocView: Content loaded, currentDoc:', currentDoc.value)
     } catch (err) {
       console.error('Error loading content:', err)
+      docStore.$patch({ 
+        error: err instanceof Error ? err.message : '加载文档失败',
+        loading: false 
+      })
     }
   }
 }
@@ -162,7 +168,24 @@ const findCurrentDocPosition = () => {
   const normalizedCurrentPath = currentDoc.value.path.replace(/\\/g, '/')
   console.log('Normalized Current Path:', normalizedCurrentPath)
   
-  const findInTree = (node: any, parent: any[] = [], level: number = 0): any[] | null => {
+  interface TreeNode {
+    name?: string
+    type?: string
+    path?: string
+    children?: TreeNode[]
+    items?: TreeNode[]
+  }
+
+  interface TreePosition {
+    node: TreeNode
+    index: number
+  }
+
+  const findInTree = (
+    node: TreeNode,
+    parent: TreePosition[] = [],
+    level: number = 0
+  ): TreePosition[] | null => {
     if (!node) return null
     
     const indent = '  '.repeat(level)
@@ -192,7 +215,6 @@ const findCurrentDocPosition = () => {
         parentChain: parent.map(p => p.node.name)
       })
       
-      // 修改返回值结构，确保包含正确的父节点和索引
       return [
         ...parent,
         { 
@@ -203,7 +225,7 @@ const findCurrentDocPosition = () => {
     }
     
     // 递归搜索所有可能的子节点
-    const searchChildren = (items: any[], itemType: string) => {
+    const searchChildren = (items: TreeNode[], itemType: string) => {
       for (let i = 0; i < items.length; i++) {
         const child = items[i]
         console.log(`${indent}Searching ${itemType} [${i}]:`, child.name || 'unnamed')
@@ -394,12 +416,6 @@ const navigation = computed(() => {
 const prevDoc = computed(() => navigation.value.prevDoc)
 const nextDoc = computed(() => navigation.value.nextDoc)
 
-// 判断当前文档是否为PDF
-const isPDF = computed(() => {
-  const path = route.params.path as string
-  return path.toLowerCase().endsWith('.pdf')
-})
-
 // 添加导航处理函数
 const handleNavigate = (path: string) => {
   router.push({ name: 'doc', params: { path } })
@@ -441,15 +457,6 @@ watch(() => route.params.path, async (path) => {
   @apply flex items-center max-w-[1200px] mx-auto h-full;
 }
 
-.theme-toggle {
-  @apply fixed right-4 top-2 p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 
-    dark:text-gray-400 dark:hover:text-gray-50 dark:hover:bg-gray-700 transition-colors;
-}
-
-.theme-icon {
-  @apply w-5 h-5;
-}
-
 .breadcrumb-item {
   @apply flex items-center;
 }
@@ -486,6 +493,7 @@ watch(() => route.params.path, async (path) => {
   @apply flex-grow bg-white w-0 dark:bg-gray-800;
   margin-left: calc(max(0px, calc(50% - 600px)) + 256px);
   width: calc(min(1200px, 100%) - 256px);
+  padding-top: 3rem;
 }
 
 .doc-navigation {
@@ -493,7 +501,7 @@ watch(() => route.params.path, async (path) => {
     border-gray-200 dark:border-gray-700;
 }
 
-.nav-link {
+.prev-link, .next-link {
   @apply flex items-center gap-4 text-gray-600 hover:text-gray-900 transition-colors max-w-[45%]
     dark:text-gray-400 dark:hover:text-gray-50;
 }
@@ -546,5 +554,22 @@ watch(() => route.params.path, async (path) => {
     @apply ml-0;
     width: 100%;
   }
+}
+
+.loading {
+  @apply flex justify-center items-center min-h-[200px];
+}
+
+.error {
+  @apply text-red-500 p-4 text-center;
+}
+
+.no-content {
+  @apply text-gray-500 p-4 text-center;
+}
+
+/* 调整全局控制栏位置 */
+:global(.global-controls) {
+  top: 4rem !important;
 }
 </style>

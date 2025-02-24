@@ -26,7 +26,7 @@ import { useRoute } from 'vue-router'
 const API_BASE_URL = ''  // 空字符串表示使用相对路径
 
 const props = defineProps<{
-  content: string
+  content?: string | null
   loading?: boolean
   error?: string | null
 }>()
