@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1",
+    "title": "AI基础知识入门",
+    "description": "了解人工智能的基本概念和应用场景，适合完全没有AI基础的初学者。",
+    "category": "入门系列",
+    "tags": ["AI入门", "基础知识"],
+    "path": "ai-basics"
+  },
+  {
+    "id": "2",
+    "title": "Python编程基础",
+    "description": "学习Python编程的基础知识，为深入学习AI打下基础。",
+    "category": "编程基础",
+    "tags": ["Python", "编程基础"],
+    "path": "python-basics"
+  },
+  {
+    "id": "3",
+    "title": "深度学习入门指南",
+    "description": "深度学习基础概念详解，帮助你理解神经网络的工作原理。",
+    "category": "进阶知识",
+    "tags": ["深度学习", "神经网络"],
+    "path": "deep-learning-intro"
+  },
+  {
+    "id": "4",
+    "title": "机器学习模型评估方法",
+    "description": "学习如何正确评估机器学习模型的性能，避免常见的评估陷阱。",
+    "category": "实用技巧",
+    "tags": ["模型评估", "机器学习"],
+    "path": "model-evaluation"
+  }
+] 

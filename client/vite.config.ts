@@ -31,7 +31,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://frp6.mmszxc.xin:18926/',
+        target: 'https://127.0.0.1:8000/',
         secure: false,  // 因为我们用的是自签名证书
         changeOrigin: true,
         ws: true,  // 支持 WebSocket

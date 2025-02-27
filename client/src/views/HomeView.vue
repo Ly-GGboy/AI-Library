@@ -11,14 +11,25 @@
         >
           备用地址
         </a>
-        <button
-          @click="toggleTheme"
-          class="theme-toggle ml-auto"
-          :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
-        >
-          <SunIcon v-if="isDark" class="w-5 h-5 text-gray-400 hover:text-gray-300" />
-          <MoonIcon v-else class="w-5 h-5 text-gray-600 hover:text-gray-700" />
-        </button>
+        <div class="header-actions">
+          <AnnouncementButton 
+            @click="openAnnouncementBoard" 
+            :has-new-updates="hasNewUpdates" 
+            class="mr-2"
+          />
+          <button
+            @click="toggleTheme"
+            @mouseenter="themeButtonHover = true"
+            @mouseleave="themeButtonHover = false"
+            class="theme-toggle"
+            :title="isDark ? '切换到亮色模式' : '切换到暗色模式'"
+          >
+            <Transition name="icon-switch" mode="out-in">
+              <SunIcon v-if="isDark" key="sun" class="w-5 h-5 text-gray-400 dark:text-gray-400" />
+              <MoonIcon v-else key="moon" class="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </Transition>
+          </button>
+        </div>
       </div>
       <SearchBar class="search" />
     </header>
@@ -57,31 +68,56 @@
         </div>
       </div>
     </main>
+
+    <AnnouncementBoard ref="announcementBoardRef" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
 import { useThemeStore } from '../stores/theme'
+import { useAnnouncementStore } from '../stores/announcement'
 import { DocumentTextIcon, SunIcon, MoonIcon } from '@heroicons/vue/24/outline'
 import SearchBar from '../components/SearchBar.vue'
 import DocTree from '../components/DocTree.vue'
+import AnnouncementButton from '../components/announcement/AnnouncementButton.vue'
+import AnnouncementBoard from '../components/announcement/AnnouncementBoard.vue'
 import { storeToRefs } from 'pinia'
 import type { DocTree as DocTreeType } from '../services/api'
+import type { ComponentPublicInstance } from 'vue'
 
 const route = useRoute()
 const router = useRouter()
 const docStore = useDocStore()
 const themeStore = useThemeStore()
+const announcementStore = useAnnouncementStore()
 const { recentDocs, loading, error, docTree } = storeToRefs(docStore)
 const { isDark } = storeToRefs(themeStore)
 const { toggleTheme } = themeStore
+const { hasNewUpdates } = storeToRefs(announcementStore)
+const themeButtonHover = ref(false)
+
+const announcementBoardRef = ref<ComponentPublicInstance & { openBoard: () => void } | null>(null)
+
+const openAnnouncementBoard = () => {
+  if (announcementBoardRef.value) {
+    announcementBoardRef.value.openBoard()
+    announcementStore.markUpdatesAsViewed()
+  }
+}
 
 onMounted(async () => {
   await docStore.loadDocTree()  // 先加载文档树
   await docStore.loadRecentDocs()
+  
+  // 加载更新信息
+  try {
+    await announcementStore.getUpdates()
+  } catch (err) {
+    console.error('Failed to load updates:', err)
+  }
   
   // 如果有 hash，跳转到对应的目录
   if (route.hash) {
@@ -137,11 +173,12 @@ const findNodeByPath = (node: DocTreeType, path: string): DocTreeType | null => 
 }
 
 .header {
-  @apply bg-white shadow-sm py-4 px-6;
+  @apply bg-white shadow dark:bg-gray-800 sticky top-0 z-30 py-4 px-6 flex flex-col relative;
 }
 
 .header-content {
-  @apply flex items-center justify-between mb-4;
+  @apply flex items-center justify-between mb-4 relative;
+  min-height: 40px; /* 确保有足够的高度 */
 }
 
 .title {
@@ -154,8 +191,25 @@ const findNodeByPath = (node: DocTreeType, path: string): DocTreeType | null => 
   @apply transition-colors duration-200;
 }
 
-.theme-toggle {
-  @apply p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+.header-actions {
+  @apply flex items-center gap-2 z-[95] ml-auto;
+  position: relative;
+}
+
+.theme-toggle, .announcement-button {
+  @apply p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+  position: relative;
+  z-index: 95;
+  transform-origin: center;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.theme-toggle:hover, .announcement-button:hover {
+  transform: scale(1.1);
+}
+
+.theme-toggle:active, .announcement-button:active {
+  transform: scale(0.95);
 }
 
 .search {
@@ -216,5 +270,21 @@ const findNodeByPath = (node: DocTreeType, path: string): DocTreeType | null => 
 
 .empty {
   @apply text-gray-500 text-center py-8;
+}
+
+.mr-2 {
+  display: block;
+}
+
+/* 图标切换动画 */
+.icon-switch-enter-active,
+.icon-switch-leave-active {
+  transition: all 0.2s ease;
+}
+
+.icon-switch-enter-from,
+.icon-switch-leave-to {
+  opacity: 0;
+  transform: scale(0.8) rotate(15deg);
 }
 </style> 

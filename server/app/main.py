@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import time
+import os
 
 app = FastAPI(
     title="AI Library API",
@@ -12,7 +13,16 @@ app = FastAPI(
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://ailibrary.space", "https://localhost:5173","https://frp6.mmszxc.xin:18925",],
+    allow_origins=[
+        "https://ailibrary.space", 
+        "https://localhost:5173",
+        "https://localhost:5175",
+        "http://localhost:5173",
+        "http://localhost:5175",
+        "https://frp6.mmszxc.xin:18925",
+        "http://localhost:5175",  # 添加admin后台域名
+        "https://localhost:5175",  # 添加admin后台域名(HTTPS)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,8 +53,15 @@ async def health_check(request: Request):
     return {"status": "healthy", "http_version": http_version}
 
 # 导入路由
-from app.routers import docs, search
+from app.routers import docs, search, announcements, feedback, admin
+
+# 初始化服务
+data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
+os.makedirs(data_dir, exist_ok=True)  # 确保数据目录存在
 
 # 注册路由
 app.include_router(docs.router, prefix="/api/docs", tags=["docs"])
-app.include_router(search.router, prefix="/api/search", tags=["search"]) 
+app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(announcements.router, prefix="/api/announcements", tags=["announcements"])
+app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])

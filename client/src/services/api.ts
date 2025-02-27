@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const api = axios.create({
+// 将api变量导出以便其他模块直接使用
+export const api = axios.create({
   baseURL: '/api',
   timeout: 100000,
   maxRedirects: 5,
@@ -105,4 +106,19 @@ export const searchApi = {
     })
     return response.data
   }
+}
+
+// 管理后台API
+export const adminAPI = {
+  // 获取仪表盘数据
+  getDashboard: () => api.get('/admin/dashboard'),
+  
+  // 获取详细统计数据
+  getStats: () => api.get('/admin/stats'),
+  
+  // 获取热门文档
+  getPopularDocs: (limit = 10) => api.get('/admin/popular-docs', { params: { limit } }),
+  
+  // 获取所有反馈
+  getAllFeedback: (limit = 50) => api.get('/admin/feedback', { params: { limit } })
 } 

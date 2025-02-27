@@ -1,18 +1,26 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from typing import List, Dict, Optional
 import os
 import json
+import logging
 from app.services.doc_service import DocService
+from app.services.stats_service import StatsService
 
-router = APIRouter()
-doc_service = DocService()
+router = APIRouter(prefix="", tags=["docs"])
+logger = logging.getLogger(__name__)
+
+def get_doc_service():
+    return DocService()
+
+def get_stats_service():
+    return StatsService()
 
 @router.get("/tree")
 async def get_doc_tree() -> Dict:
     """获取文档目录树"""
     try:
-        return await doc_service.get_doc_tree()
+        return await get_doc_service().get_doc_tree()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -21,11 +29,11 @@ async def get_doc_content(path: str):
     """获取文档内容或文件"""
     try:
         # 获取文件路径和MIME类型
-        file_path, mime_type = await doc_service.get_file_response(path)
+        file_path, mime_type = await get_doc_service().get_file_response(path)
         
         # 如果是Markdown文件，返回内容
         if path.endswith('.md'):
-            return await doc_service.get_doc_content(path)
+            return await get_doc_service().get_doc_content(path)
             
         # 如果是PDF文件，返回文件和正确的Content-Type
         if mime_type == 'application/pdf':
@@ -54,7 +62,7 @@ async def get_doc_content(path: str):
 async def get_doc_metadata(path: str):
     """获取文档元数据，包括PDF的页数等信息"""
     try:
-        return await doc_service.get_doc_content(path)
+        return await get_doc_service().get_doc_content(path)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -64,7 +72,7 @@ async def get_doc_metadata(path: str):
 async def get_recent_docs(limit: int = 10) -> List[Dict]:
     """获取最近更新的文档"""
     try:
-        return await doc_service.get_recent_docs(limit)
+        return await get_doc_service().get_recent_docs(limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -72,6 +80,33 @@ async def get_recent_docs(limit: int = 10) -> List[Dict]:
 async def get_breadcrumb(path: str) -> List[Dict]:
     """获取文档的面包屑导航"""
     try:
-        return await doc_service.get_breadcrumb(path)
+        return await get_doc_service().get_breadcrumb(path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/{doc_path:path}")
+async def get_doc(
+    doc_path: str,
+    request: Request,
+    doc_service: DocService = Depends(get_doc_service),
+    stats_service: StatsService = Depends(get_stats_service)
+):
+    """获取文档内容"""
+    try:
+        # 获取用户ID或会话ID
+        user_id = request.cookies.get("user_id") or request.client.host
+        
+        # 记录访问
+        stats_service.record_visit(doc_path, user_id)
+        
+        # 获取文档内容
+        doc = doc_service.get_doc(doc_path)
+        if not doc:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        return doc
+    except Exception as e:
+        logger.error(f"获取文档失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取文档失败: {str(e)}"
+        )

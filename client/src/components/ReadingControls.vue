@@ -183,6 +183,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useReadingStore } from '../stores/reading'
+import { useThemeStore } from '../stores/theme'
 import { 
   ArrowsPointingInIcon, 
   ArrowsPointingOutIcon,
@@ -194,6 +195,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 const readingStore = useReadingStore()
+const themeStore = useThemeStore()
 const isImmersive = ref(false)
 const showControls = ref(true)
 const showSettings = ref(false)
@@ -228,6 +230,14 @@ const updateStyles = () => {
 // 设置主题
 const setTheme = (theme: 'light' | 'dark' | 'sepia') => {
   settings.value.theme = theme
+  
+  // 更新全局主题状态
+  if (theme === 'dark') {
+    themeStore.setTheme(true)
+  } else if (theme === 'light') {
+    themeStore.setTheme(false)
+  }
+  
   document.documentElement.classList.remove('light', 'dark', 'sepia')
   document.documentElement.classList.add(theme)
   readingStore.updateSettings({ theme })
@@ -334,9 +344,11 @@ onMounted(() => {
   const savedSettings = readingStore.settings
   if (savedSettings) {
     settings.value = { ...settings.value, ...savedSettings }
-    if (savedSettings.theme) {
-      setTheme(savedSettings.theme)
-    }
+    
+    // 从ThemeStore获取当前主题
+    const currentTheme = themeStore.isDark ? 'dark' : 'light'
+    settings.value.theme = currentTheme
+    
     updateStyles()
   }
 })

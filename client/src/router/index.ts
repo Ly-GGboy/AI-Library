@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import DocView from '../views/DocView.vue'
 import SearchView from '../views/SearchView.vue'
+import AdminDashboard from '../views/AdminDashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,6 +21,14 @@ const router = createRouter({
       path: '/search',
       name: 'search',
       component: SearchView
+    },
+    {
+      path: '/admin',
+      name: 'Admin',
+      component: AdminDashboard,
+      meta: {
+        title: '管理后台 - AI Library'
+      }
     }
   ]
 })

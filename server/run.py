@@ -1,8 +1,42 @@
 import uvicorn
 import os
 import ssl
+import logging
+from app.main import app
+from fastapi.routing import APIRoute
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def print_routes():
+    """打印所有可用的路由"""
+    route_info = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            methods = [method for method in route.methods]
+            route_info.append({
+                "path": route.path,
+                "name": route.name,
+                "methods": methods
+            })
+    
+    # 按路径排序
+    route_info.sort(key=lambda x: x["path"])
+    
+    # 打印路由信息
+    print("\n=== Available API Routes ===")
+    print(f"{'Method':<10} {'Path':<50} {'Name':<30}")
+    print("-" * 90)
+    for route in route_info:
+        methods_str = ", ".join(route["methods"])
+        print(f"{methods_str:<10} {route['path']:<50} {route['name']:<30}")
+    print("=" * 90 + "\n")
 
 if __name__ == "__main__":
+    # 打印路由信息
+    print_routes()
+    
     # 获取证书文件的路径
     cert_dir = os.path.dirname(os.path.abspath(__file__))
     ssl_keyfile = os.path.join(cert_dir, "key.pem")
