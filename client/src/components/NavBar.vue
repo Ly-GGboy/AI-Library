@@ -3,8 +3,8 @@
     <div class="container">
       <div class="navbar-brand">
         <router-link to="/" class="brand-link">
-          <img src="../assets/logo.svg" alt="AI Library Logo" class="logo" v-if="false" />
-          <span class="brand-text">AI Library</span>
+          <img src="../assets/ai-logo.svg" alt="AI Logo" class="logo" />
+          <span class="brand-text">AI</span>
         </router-link>
       </div>
       
@@ -24,25 +24,17 @@
             @keyup.enter="handleSearch"
           />
           <button class="search-button" @click="handleSearch">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
+            <MagnifyingGlassIcon class="icon" />
           </button>
         </div>
         
         <button class="theme-toggle" @click="toggleTheme">
-          <svg v-if="isDarkMode" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
-          </svg>
+          <SunIcon v-if="themeStore.isDark" class="icon" />
+          <MoonIcon v-else class="icon" />
         </button>
         
         <button class="announcement-button" @click="openAnnouncement">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="icon">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
-          </svg>
+          <MegaphoneIcon class="icon" />
         </button>
       </div>
     </div>
@@ -53,9 +45,12 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAnnouncementStore } from '../stores/announcement';
+import { useThemeStore } from '../stores/theme';
+import { MagnifyingGlassIcon, SunIcon, MoonIcon, MegaphoneIcon } from '@heroicons/vue/24/outline';
 
 const router = useRouter();
 const announcementStore = useAnnouncementStore();
+const themeStore = useThemeStore();
 
 // 搜索功能
 const searchQuery = ref('');

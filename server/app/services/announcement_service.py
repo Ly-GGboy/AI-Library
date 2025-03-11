@@ -120,21 +120,40 @@ class AnnouncementService:
                 feedback_dict = feedback.dict()
             else:
                 feedback_dict = dict(feedback)
+            
+            # 添加ID和时间戳（如果没有）
+            if 'id' not in feedback_dict:
+                feedback_dict['id'] = str(uuid.uuid4())
+            if 'timestamp' not in feedback_dict:
+                feedback_dict['timestamp'] = datetime.now().isoformat()
                 
-            # 加载现有反馈
+            # 加载现有反馈，如果文件不存在则创建新的
             feedbacks = []
-            if os.path.exists(self.feedback_file):
-                with open(self.feedback_file, 'r', encoding='utf-8') as f:
-                    feedbacks = json.load(f)
+            try:
+                if os.path.exists(self.feedback_file):
+                    with open(self.feedback_file, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        if content.strip():  # 检查文件是否为空
+                            feedbacks = json.loads(content)
+                        else:
+                            feedbacks = []
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in feedback file: {str(e)}")
+                feedbacks = []  # 如果文件损坏，重新开始
             
             # 添加新反馈
             feedbacks.append(feedback_dict)
+            
+            # 确保数据目录存在
+            os.makedirs(os.path.dirname(self.feedback_file), exist_ok=True)
             
             # 保存到文件
             with open(self.feedback_file, 'w', encoding='utf-8') as f:
                 json.dump(feedbacks, f, ensure_ascii=False, indent=2)
                 
             logger.info(f"Saved new feedback from {feedback_dict.get('name', 'Anonymous')}")
+            return feedback_dict  # 返回保存的反馈，包含生成的ID
+            
         except Exception as e:
             logger.error(f"Error saving feedback: {str(e)}")
             raise
