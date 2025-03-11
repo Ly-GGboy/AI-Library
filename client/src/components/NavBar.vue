@@ -184,6 +184,19 @@ onMounted(() => {
   width: 200px;
 }
 
+.dark .search-input {
+  color: var(--dark-text-primary);
+  background: transparent;
+}
+
+.search-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.dark .search-input::placeholder {
+  color: var(--dark-text-secondary);
+}
+
 .search-button {
   background: transparent;
   border: none;

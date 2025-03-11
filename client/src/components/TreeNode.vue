@@ -399,9 +399,9 @@ const articleCount = computed(() => {
 
 /* 确保内容容器可以正确滚动 */
 .node-content {
-  @apply flex items-center gap-1 px-1 py-2.5 text-sm rounded-lg cursor-pointer 
+  @apply flex items-start gap-1 px-1 py-2 text-sm rounded-lg cursor-pointer 
     transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
-    active:scale-[0.98] touch-pan-y relative; /* 添加relative定位 */
+    active:scale-[0.98] touch-pan-y;
   min-width: 0;
 }
 
@@ -419,9 +419,11 @@ const articleCount = computed(() => {
 }
 
 .node-name {
-  @apply text-gray-700 dark:text-gray-300 min-w-0 flex-1 cursor-default
-    whitespace-nowrap overflow-hidden text-ellipsis;
-  max-width: calc(100% - 30px); /* 为计数徽章留出空间 */
+  @apply text-gray-700 dark:text-gray-300 min-w-0 flex-1 cursor-default;
+  overflow-wrap: break-word;
+  word-break: break-all;
+  line-height: 1.4;
+  padding: 2px 0;
 }
 
 .folder-name {
@@ -442,10 +444,10 @@ const articleCount = computed(() => {
 }
 
 .node-name-container {
-  @apply flex items-center min-w-0 flex-1 gap-1;
-  max-width: 100%; /* 允许容器使用全部可用宽度 */
-  position: relative; /* 添加relative定位 */
-  z-index: 1; /* 确保内容在滚动时保持可见 */
+  @apply flex items-start min-w-0 flex-1 gap-1;
+  max-width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .node-name.expanded {
@@ -457,17 +459,15 @@ const articleCount = computed(() => {
   display: none;
 }
 
-/* 优化展开后的间距 */
-.node-content {
-  @apply flex items-center gap-1 px-1 py-2.5 text-sm rounded-lg cursor-pointer 
-    transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-800
-    active:scale-[0.98] touch-pan-y;
-  min-width: 0;
+/* 调整图标垂直对齐 */
+.node-content svg {
+  @apply mt-1;
 }
 
+/* 调整计数徽章样式 */
 .count-badge {
   @apply text-[11px] leading-[16px] px-1.5 rounded-full bg-gray-100 text-gray-500 ml-auto flex-shrink-0 
-    dark:bg-gray-800/60 dark:text-gray-400 min-w-[20px] h-[20px] inline-flex items-center justify-center;
+    dark:bg-gray-800/60 dark:text-gray-400 min-w-[20px] h-[20px] inline-flex items-center justify-center mt-1;
   font-feature-settings: "tnum";
 }
 

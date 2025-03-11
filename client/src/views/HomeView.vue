@@ -18,7 +18,7 @@
           
           <!-- 搜索框调整到中间位置 -->
           <div class="flex-1 max-w-xl mx-auto">
-            <SearchBar class="search" />
+            <SearchBar class="search" @search="onSearch" />
           </div>
           
           <!-- 右侧操作按钮 -->
@@ -501,6 +501,14 @@ const getVisitedRandomIcon = (index: number) => {
   // 使用 index 作为种子来保证每次渲染相同位置的图标都是一样的
   const randomIndex = Math.abs(Math.sin(index + 1) * icons.length) | 0
   return icons[randomIndex]
+}
+
+// 处理搜索
+const onSearch = (query: string) => {
+  router.push({
+    name: 'search',
+    query: { q: query }
+  })
 }
 </script>
 

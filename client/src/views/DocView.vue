@@ -46,9 +46,9 @@
               v-model="searchQuery"
               type="text" 
               placeholder="搜索文章..." 
-              class="w-full px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700 text-sm transition-all"
+              class="w-full px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm transition-all"
             >
-            <button class="absolute right-3 top-2 text-gray-400 dark:text-gray-500">
+            <button class="absolute right-3 top-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
               <MagnifyingGlassIcon class="w-5 h-5" />
             </button>
           </div>
@@ -75,7 +75,7 @@
           <div v-else-if="error" class="error text-red-500 dark:text-red-400 p-4 rounded bg-red-50 dark:bg-red-900/20">
             {{ error }}
           </div>
-          <div v-else-if="currentDoc">
+          <div v-else-if="currentDoc" class="zoom-container" :style="zoomStyles">
             <MarkdownViewer 
               v-if="!isPDFDoc" 
               :content="currentDoc.content || ''" 
@@ -88,45 +88,53 @@
               :path="currentDoc.path"
               class="w-full"
             />
+            
+            <!-- 文档导航 -->
+            <div v-if="!isPDFDoc" class="doc-navigation mt-8 flex justify-between items-center">
+              <router-link
+                v-if="prevDoc"
+                :to="{ name: 'doc', params: { path: prevDoc.path } }"
+                class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              >
+                <ChevronLeftIcon class="w-5 h-5" />
+                <span>{{ prevDoc.name }}</span>
+              </router-link>
+              <router-link
+                v-if="nextDoc"
+                :to="{ name: 'doc', params: { path: nextDoc.path } }"
+                class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+              >
+                <span>{{ nextDoc.name }}</span>
+                <ChevronRightIcon class="w-5 h-5" />
+              </router-link>
+            </div>
           </div>
           <div v-else class="text-gray-500 dark:text-gray-400 text-center py-8">
             未找到文档内容
-          </div>
-          
-          <!-- 文档导航 -->
-          <div v-if="currentDoc && !isPDFDoc" class="doc-navigation mt-8 flex justify-between items-center">
-            <router-link
-              v-if="prevDoc"
-              :to="{ name: 'doc', params: { path: prevDoc.path } }"
-              class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            >
-              <ChevronLeftIcon class="w-5 h-5" />
-              <span>{{ prevDoc.name }}</span>
-            </router-link>
-            <router-link
-              v-if="nextDoc"
-              :to="{ name: 'doc', params: { path: nextDoc.path } }"
-              class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            >
-              <span>{{ nextDoc.name }}</span>
-              <ChevronRightIcon class="w-5 h-5" />
-            </router-link>
           </div>
         </div>
       </main>
     </div>
 
     <!-- 悬浮工具栏 -->
-    <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-2 flex items-center space-x-4">
+    <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-2 flex items-center space-x-4 z-50">
       <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
         <Bars3Icon class="w-5 h-5" />
       </button>
       <div class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
-      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+      <button 
+        @click="zoomOut"
+        class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400"
+        :disabled="zoomLevel <= 0.5"
+      >
         <MagnifyingGlassMinusIcon class="w-5 h-5" />
       </button>
-      <span class="text-sm text-gray-700 dark:text-gray-300">100%</span>
-      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+      <span class="text-sm text-gray-700 dark:text-gray-300">{{ Math.round(zoomLevel * 100) }}%</span>
+      <button 
+        @click="zoomIn"
+        class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400"
+        :disabled="zoomLevel >= 2"
+      >
         <MagnifyingGlassPlusIcon class="w-5 h-5" />
       </button>
       <div class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
@@ -219,7 +227,6 @@ onMounted(async () => {
   if (!docTree.value) {
     await docStore.loadDocTree()
   }
-  await loadContent()
 })
 
 // 优化查找当前文档在文档树中的位置的函数
@@ -492,26 +499,43 @@ const handleNavigate = (path: string) => {
   router.push({ name: 'doc', params: { path } })
 }
 
+// 优化 watch，使用 immediate 确保首次加载
 watch(() => route.params.path, async (path) => {
   if (path) {
-    try {
-      if (path.toString().toLowerCase().endsWith('.pdf')) {
-        // PDF 文件不需要加载内容，直接设置当前文档路径
-        docStore.$patch({
-          currentDoc: { path: path.toString(), name: path.toString().split('/').pop() || '' },
-          loading: false,
-          error: null
-        })
-      } else {
-        await docStore.loadDocContent(path.toString())
-      }
-    } catch (err) {
-      console.error('Error loading document:', err)
-    }
+    await loadContent()
   }
 }, { immediate: true })
 
 const searchQuery = ref('')
+
+// 修改缩放相关的实现
+const zoomLevel = ref(1)
+const ZOOM_STEP = 0.1
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 2
+
+// 计算缩放样式
+const zoomStyles = computed(() => {
+  const scale = zoomLevel.value
+  return {
+    width: `${100 / scale}%`,  // 调整容器宽度以适应缩放
+    transform: `scale(${scale})`,
+    transformOrigin: 'top left',
+    marginBottom: `${(scale - 1) * 100}px`, // 补偿缩放导致的高度变化
+  }
+})
+
+const zoomIn = () => {
+  if (zoomLevel.value < MAX_ZOOM) {
+    zoomLevel.value = Math.min(MAX_ZOOM, zoomLevel.value + ZOOM_STEP)
+  }
+}
+
+const zoomOut = () => {
+  if (zoomLevel.value > MIN_ZOOM) {
+    zoomLevel.value = Math.max(MIN_ZOOM, zoomLevel.value - ZOOM_STEP)
+  }
+}
 </script>
 
 <style scoped>
@@ -594,5 +618,17 @@ const searchQuery = ref('')
   font-size: 1.125rem;
   line-height: 1.7;
   margin-bottom: 1.25rem;
+}
+
+/* 添加缩放容器样式 */
+.zoom-container {
+  position: relative;
+  transform-origin: top left;
+}
+
+/* 修改滚动条样式，确保在缩放时仍然可见 */
+main {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 </style>

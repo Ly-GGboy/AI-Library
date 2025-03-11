@@ -59,11 +59,32 @@ export interface SearchResult {
     line: number
   }>
   last_modified: string
+  relevance_score: number
 }
 
 export interface Breadcrumb {
   name: string
   path: string
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+  total: number
+  total_matches: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+export interface SearchParams {
+  q: string
+  page?: number
+  per_page?: number
+  sort_by?: string
+  sort_order?: string
+  doc_type?: string
+  date_from?: string
+  date_to?: string
 }
 
 export const docApi = {
@@ -94,22 +115,9 @@ export const docApi = {
   }
 }
 
-export const searchApi = {
-  // 搜索文档
-  search: async (query: string, limit: number = 10) => {
-    const response = await api.get<SearchResult[]>('/search', {
-      params: { q: query, limit }
-    })
-    return response.data
-  },
-
-  // 获取搜索建议
-  getSuggestions: async (query: string, limit: number = 5) => {
-    const response = await api.get<string[]>('/search/suggest', {
-      params: { q: query, limit }
-    })
-    return response.data
-  }
+export const searchDocs = async (params: SearchParams): Promise<SearchResponse> => {
+  const response = await api.get('/search', { params })
+  return response.data
 }
 
 // 管理后台API

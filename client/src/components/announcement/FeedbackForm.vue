@@ -202,7 +202,7 @@ const submitForm = () => {
 .form-textarea {
   @apply px-3 py-2 rounded-md bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600;
   @apply text-gray-900 dark:text-gray-100;
-  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:focus:ring-primary-400;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:focus:ring-primary-400 dark:focus:border-primary-400;
   @apply placeholder:text-gray-400 dark:placeholder:text-gray-500;
   transition: border-color 0.2s, box-shadow 0.2s;
 }

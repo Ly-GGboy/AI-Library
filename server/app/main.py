@@ -65,3 +65,8 @@ app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(announcements.router, prefix="/api/announcements", tags=["announcements"])
 app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时执行的事件"""
+    print("Application started. If search index is empty, please use the /api/search/rebuild-index endpoint to build it.")
