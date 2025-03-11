@@ -54,8 +54,15 @@
         </div>
         
         <!-- 布局设置 -->
-        <div class="setting-section">
-          <h4>布局</h4>
+        <div class="setting-section" :class="{ 'disabled': !isImmersive }">
+          <div class="section-header">
+            <h4>布局</h4>
+            <span v-if="!isImmersive" class="disabled-hint">
+              <InformationCircleIcon class="w-4 h-4" />
+              需要开启沉浸阅读
+            </span>
+          </div>
+          
           <div class="setting-item">
             <label>内容宽度</label>
             <input 
@@ -65,6 +72,7 @@
               max="95" 
               step="5"
               @input="updateStyles"
+              :disabled="!isImmersive"
             />
             <span>{{ settings.contentWidth }}%</span>
           </div>
@@ -78,6 +86,7 @@
               max="24" 
               step="1"
               @input="updateStyles"
+              :disabled="!isImmersive"
             />
             <span>{{ settings.fontSize }}px</span>
           </div>
@@ -91,6 +100,7 @@
               max="2.0" 
               step="0.1"
               @input="updateStyles"
+              :disabled="!isImmersive"
             />
             <span>{{ settings.lineHeight }}</span>
           </div>
@@ -104,19 +114,28 @@
               max="2.0" 
               step="0.1"
               @input="updateStyles"
+              :disabled="!isImmersive"
             />
             <span>{{ settings.paragraphSpacing }}rem</span>
           </div>
         </div>
 
         <!-- 显示设置 -->
-        <div class="setting-section">
-          <h4>显示</h4>
+        <div class="setting-section" :class="{ 'disabled': !isImmersive }">
+          <div class="section-header">
+            <h4>显示</h4>
+            <span v-if="!isImmersive" class="disabled-hint">
+              <InformationCircleIcon class="w-4 h-4" />
+              需要开启沉浸阅读
+            </span>
+          </div>
+          
           <div class="setting-item">
             <label>
               <input 
                 type="checkbox" 
                 v-model="settings.autoHideControls"
+                :disabled="!isImmersive"
               />
               自动隐藏控制栏
             </label>
@@ -127,6 +146,7 @@
               <input 
                 type="checkbox" 
                 v-model="settings.enableAutoScroll"
+                :disabled="!isImmersive"
               />
               启用自动滚动
             </label>
@@ -140,6 +160,7 @@
               min="1" 
               max="10" 
               step="1"
+              :disabled="!isImmersive"
             />
             <span>{{ settings.scrollSpeed }}</span>
           </div>
@@ -184,6 +205,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useReadingStore } from '../stores/reading'
 import { useThemeStore } from '../stores/theme'
+import { useRoute } from 'vue-router'
+import { useDocStore } from '../stores/doc'
 import { 
   ArrowsPointingInIcon, 
   ArrowsPointingOutIcon,
@@ -191,11 +214,14 @@ import {
   XMarkIcon,
   SunIcon,
   MoonIcon,
-  BookOpenIcon
+  BookOpenIcon,
+  InformationCircleIcon
 } from '@heroicons/vue/24/outline'
 
 const readingStore = useReadingStore()
 const themeStore = useThemeStore()
+const route = useRoute()
+const docStore = useDocStore()
 const isImmersive = ref(false)
 const showControls = ref(true)
 const showSettings = ref(false)
@@ -217,6 +243,10 @@ const settings = ref({
   scrollSpeed: 5,
   theme: 'light'
 })
+
+// 自动滚动相关
+const scrollInterval = ref<number | null>(null)
+const isScrolling = ref(false)
 
 // 更新样式变量
 const updateStyles = () => {
@@ -281,24 +311,43 @@ const clearHideTimer = () => {
   showControls.value = true
 }
 
-// 自动滚动
-let scrollInterval: number | null = null
+// 开始自动滚动
 const startAutoScroll = () => {
-  if (!settings.value.enableAutoScroll) return
-  stopAutoScroll()
-  scrollInterval = window.setInterval(() => {
-    window.scrollBy({
+  if (scrollInterval.value) return
+  
+  isScrolling.value = true
+  scrollInterval.value = window.setInterval(() => {
+    // 获取主要内容容器
+    const mainContent = document.querySelector('main')
+    if (!mainContent) return
+
+    const scrollHeight = mainContent.scrollHeight
+    const clientHeight = mainContent.clientHeight
+    const currentScroll = mainContent.scrollTop
+    const maxScroll = scrollHeight - clientHeight
+
+    // 如果已经滚动到底部，停止滚动
+    if (currentScroll >= maxScroll) {
+      stopAutoScroll()
+      return
+    }
+
+    // 使用 scrollBy 进行滚动
+    mainContent.scrollBy({
       top: settings.value.scrollSpeed,
-      behavior: 'smooth'
+      behavior: 'auto'
     })
-  }, 50)
+  }, 30) // 使用更小的间隔以获得更平滑的滚动
 }
 
+// 停止自动滚动
 const stopAutoScroll = () => {
-  if (scrollInterval) {
-    clearInterval(scrollInterval)
-    scrollInterval = null
+  if (scrollInterval.value) {
+    window.clearInterval(scrollInterval.value)
+    scrollInterval.value = null
   }
+  isScrolling.value = false
+  settings.value.enableAutoScroll = false
 }
 
 // 监听鼠标移动
@@ -318,13 +367,36 @@ const handleKeydown = (e: KeyboardEvent) => {
 
 // 更新阅读进度
 const updateProgress = () => {
-  const element = document.documentElement
-  const totalHeight = element.scrollHeight - element.clientHeight
-  const currentPosition = element.scrollTop
-  progress.value = Math.round((currentPosition / totalHeight) * 100)
+  // 获取当前文档类型
+  const currentDoc = docStore.currentDoc
+  if (!currentDoc) return
+
+  // 根据文档类型使用不同的进度计算方式
+  if (currentDoc.type === 'pdf') {
+    // PDF 文档：使用当前页码和总页数
+    const pdfViewer = document.querySelector('.pdf-viewer')
+    if (pdfViewer) {
+      const currentPage = parseInt(pdfViewer.getAttribute('data-current-page') || '1')
+      const totalPages = parseInt(pdfViewer.getAttribute('data-total-pages') || '1')
+      progress.value = Math.round((currentPage / totalPages) * 100)
+    }
+  } else {
+    // Markdown 文档：使用滚动位置
+    const mainContent = document.querySelector('main')
+    if (!mainContent) return
+    
+    const scrollHeight = mainContent.scrollHeight
+    const clientHeight = mainContent.clientHeight
+    const currentScroll = mainContent.scrollTop
+    const maxScroll = scrollHeight - clientHeight
+    
+    if (maxScroll > 0) {
+      progress.value = Math.round((currentScroll / maxScroll) * 100)
+    }
+  }
 }
 
-// 监听设置变化
+// 监听自动滚动设置变化
 watch(() => settings.value.enableAutoScroll, (newValue) => {
   if (newValue) {
     startAutoScroll()
@@ -337,7 +409,18 @@ watch(() => settings.value.enableAutoScroll, (newValue) => {
 onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('keydown', handleKeydown)
-  document.addEventListener('scroll', updateProgress)
+  
+  // 监听文档内容变化和滚动事件
+  const mainContent = document.querySelector('main')
+  if (mainContent) {
+    mainContent.addEventListener('scroll', updateProgress)
+  }
+
+  // 监听 PDF 页面变化事件
+  window.addEventListener('pdf-page-changed', updateProgress)
+  
+  // 初始化进度
+  updateProgress()
   startHideTimer()
 
   // 恢复保存的设置
@@ -357,7 +440,13 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('keydown', handleKeydown)
-  document.removeEventListener('scroll', updateProgress)
+  window.removeEventListener('pdf-page-changed', updateProgress)
+  
+  const mainContent = document.querySelector('main')
+  if (mainContent) {
+    mainContent.removeEventListener('scroll', updateProgress)
+  }
+  
   if (hideTimeout) clearTimeout(hideTimeout)
   stopAutoScroll()
 })
@@ -365,10 +454,6 @@ onUnmounted(() => {
 
 <style scoped>
 .reading-controls {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 9999;
   transition: all 0.3s ease;
 }
 
@@ -465,7 +550,7 @@ onUnmounted(() => {
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   padding: 1rem;
-  z-index: 9999;
+  z-index: 99999;
 }
 
 .dark .settings-panel {
@@ -474,6 +559,27 @@ onUnmounted(() => {
 
 .sepia .settings-panel {
   background: var(--sepia-bg);
+}
+
+/* 护眼模式下设置面板的文字颜色 */
+.sepia .panel-header h3 {
+  color: #444444;
+}
+
+.sepia .setting-section h4 {
+  color: #444444;
+}
+
+.sepia .setting-item label {
+  color: #444444;
+}
+
+.sepia .setting-item span {
+  color: #444444;
+}
+
+.sepia .disabled-hint {
+  color: rgba(68, 68, 68, 0.5);
 }
 
 .panel-header {
@@ -626,5 +732,33 @@ onUnmounted(() => {
 .slide-leave-to {
   opacity: 0;
   transform: translateY(-0.5rem);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.disabled-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: rgba(var(--text-color), 0.5);
+}
+
+.dark .disabled-hint {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.setting-section.disabled .setting-item {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-section.disabled input {
+  cursor: not-allowed;
 }
 </style> 

@@ -49,7 +49,7 @@ onMounted(() => {
 
 .global-controls {
   position: fixed;
-  top: 5rem;
+  top: 0.5rem;
   right: 1rem;
   z-index: 50; /* 降低z-index，避免遮挡公告板 */
 }

@@ -21,10 +21,28 @@
 }
 
 /* 隐藏非必要UI元素 */
+.immersive-reading header,
+.immersive-reading aside,
 .immersive-reading .doc-tree,
 .immersive-reading .breadcrumb,
-.immersive-reading .sidebar {
+.immersive-reading .sidebar,
+.immersive-reading nav,
+.immersive-reading .floating-controls,
+.immersive-reading .bottom-controls,
+.immersive-reading .fixed.bottom-8.left-1\/2.transform.-translate-x-1\/2 {
   display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 重置主内容区域布局 */
+.immersive-reading main {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
 }
 
 /* 重置文章布局 */
@@ -81,9 +99,13 @@
 }
 
 .immersive-reading .markdown-body p {
-  margin-bottom: var(--reading-paragraph-spacing);
+  margin-bottom: var(--reading-paragraph-spacing) !important;
   font-size: var(--reading-font-size) !important;
   line-height: var(--reading-line-height) !important;
+}
+
+.immersive-reading .markdown-body > * {
+  margin-bottom: var(--reading-paragraph-spacing) !important;
 }
 
 /* 确保其他文本元素也遵循字体大小设置 */

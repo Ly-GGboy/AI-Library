@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文档阅读中心</title>
+    <!-- Tailwind CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Inter 字体 -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <!-- Remix Icon CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        /* 全局样式 */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        
+        /* 文档卡片悬浮效果 */
+        .doc-card {
+            transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .doc-card:hover {
+            transform: scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01);
+        }
+        
+        /* 页面过渡动画 */
+        .page-transition {
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+        .page-hidden {
+            opacity: 0;
+            transform: translateY(10px);
+            pointer-events: none;
+            position: absolute;
+            width: 100%;
+        }
+        .page-visible {
+            opacity: 1;
+            transform: translateY(0);
+            position: relative;
+        }
+        
+        /* 文档内容样式 */
+        .doc-content h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+        }
+        .doc-content h2 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            letter-spacing: -0.025em;
+            margin: 2rem 0 1rem;
+        }
+        .doc-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem;
+        }
+        .doc-content p {
+            font-size: 1.125rem;
+            line-height: 1.7;
+            margin-bottom: 1.25rem;
+            color: #333;
+        }
+        
+        /* 毛玻璃效果 */
+        .glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* 阅读进度条 */
+        .progress-bar {
+            height: 4px;
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-value {
+            height: 100%;
+            background: #0071e3;
+            border-radius: 2px;
+        }
+        
+        /* 动态背景渐变 */
+        .dynamic-bg {
+            background: linear-gradient(120deg, #f8f9fa, #ffffff);
+            background-size: 200% 200%;
+            animation: gradientAnimation 15s ease infinite;
+        }
+        @keyframes gradientAnimation {
+            0% { background-position: 0% 50% }
+            50% { background-position: 100% 50% }
+            100% { background-position: 0% 50% }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <!-- 首页视图 -->
+    <div id="homePage" class="page-transition page-visible min-h-screen dynamic-bg">
+        <!-- 顶部导航栏 -->
+        <header class="glass sticky top-0 z-50 border-b border-gray-100">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center">
+                        <a href="#" class="text-xl font-semibold tracking-tight">文档中心</a>
+                    </div>
+                    
+                    <!-- 搜索框调整到中间位置 -->
+                    <div class="flex-1 max-w-xl mx-auto">
+                        <div class="relative">
+                            <input type="text" placeholder="搜索文档..." class="w-full px-4 py-2 rounded-full bg-gray-100 border-none focus:outline-none focus:ring-2 focus:ring-gray-200 text-sm transition-all">
+                            <button class="absolute right-3 top-2 text-gray-400">
+                                <i class="ri-search-line"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 右侧空间保留，保持布局平衡 -->
+                    <div class="w-32 flex items-center justify-end space-x-4">
+                        <button class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                            <i class="ri-notification-3-line text-gray-500"></i>
+                        </button>
+                        <button class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                            <i class="ri-moon-line text-gray-500"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 主体内容 -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- 顶部横幅 -->
+            <div class="mb-12 text-center">
+                <h1 class="text-4xl font-bold tracking-tight mb-4">你的知识库</h1>
+                <p class="text-xl text-gray-500 max-w-3xl mx-auto">探索、阅读和管理你的文档，随时随地获取知识</p>
+            </div>
+            
+            <!-- 内容区域 -->
+            <div class="flex gap-8">
+                <!-- 左侧边栏 - 文件导航 -->
+                <div class="w-64 flex-shrink-0">
+                    <div class="bg-white rounded-2xl shadow-sm p-4">
+                        <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 mb-3">文件夹</h3>
+                        <ul class="space-y-1">
+                            <li>
+                                <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                        <span>deepseek相关文档</span>
+                                    </div>
+                                    <span class="text-xs text-gray-400">9</span>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg bg-blue-50 cursor-pointer group">
+                                    <div class="flex items-center">
+                                        <i class="ri-folder-open-line mr-3 text-blue-500"></i>
+                                        <span class="font-medium text-blue-700">云计算</span>
+                                    </div>
+                                    <span class="text-xs text-blue-400">364</span>
+                                </div>
+                                
+                                <ul class="ml-6 mt-1 space-y-1">
+                                    <li>
+                                        <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                            <div class="flex items-center">
+                                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                                <span>Serverless</span>
+                                            </div>
+                                            <span class="text-xs text-gray-400">70</span>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                            <div class="flex items-center">
+                                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                                <span>云原生技术</span>
+                                            </div>
+                                            <span class="text-xs text-gray-400">27</span>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>
+                                <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                        <span>人工智能</span>
+                                    </div>
+                                    <span class="text-xs text-gray-400">665</span>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                        <span>算法与数据结构</span>
+                                    </div>
+                                    <span class="text-xs text-gray-400">128</span>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="flex items-center justify-between px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                    <div class="flex items-center">
+                                        <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                        <span>Web开发</span>
+                                    </div>
+                                    <span class="text-xs text-gray-400">93</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- 主内容区 -->
+                <div class="flex-1">
+                    <!-- 最近更新标题 -->
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-semibold">最近更新</h2>
+                        <div class="flex space-x-2">
+                            <button class="px-3 py-1.5 text-sm rounded-full bg-gray-100 hover:bg-gray-200 transition-colors">
+                                最近更新
+                            </button>
+                            <button class="px-3 py-1.5 text-sm rounded-full hover:bg-gray-100 transition-colors">
+                                最近访问
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 文档网格 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- 文档卡片1 -->
+                        <div class="doc-card bg-white rounded-2xl shadow-sm overflow-hidden" onclick="showReaderView()">
+                            <div class="h-40 bg-gradient-to-r from-blue-50 to-indigo-50 flex items-center justify-center">
+                                <i class="ri-book-open-line text-5xl text-blue-400"></i>
+                            </div>
+                            <div class="p-5">
+                                <h3 class="text-lg font-semibold mb-2">本书框架</h3>
+                                <p class="text-sm text-gray-500 mb-3">
+                                    <span>2025年1月14日</span>
+                                    <span class="mx-2">·</span>
+                                    <span>3 小时前更新</span>
+                                </p>
+                                <div class="flex items-center justify-between mt-4">
+                                    <span class="text-xs text-gray-500">约 15 分钟阅读</span>
+                                    <button class="p-1.5 rounded-full hover:bg-gray-100">
+                                        <i class="ri-more-line text-gray-400"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 文档卡片2 -->
+                        <div class="doc-card bg-white rounded-2xl shadow-sm overflow-hidden" onclick="showReaderView()">
+                            <div class="h-40 bg-gradient-to-r from-green-50 to-teal-50 flex items-center justify-center">
+                                <i class="ri-file-list-3-line text-5xl text-green-400"></i>
+                            </div>
+                            <div class="p-5">
+                                <h3 class="text-lg font-semibold mb-2">算法</h3>
+                                <p class="text-sm text-gray-500 mb-3">
+                                    <span>2025年1月14日</span>
+                                    <span class="mx-2">·</span>
+                                    <span>1 天前更新</span>
+                                </p>
+                                <div class="flex items-center justify-between mt-4">
+                                    <span class="text-xs text-gray-500">约 20 分钟阅读</span>
+                                    <button class="p-1.5 rounded-full hover:bg-gray-100">
+                                        <i class="ri-more-line text-gray-400"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 文档卡片3 -->
+                        <div class="doc-card bg-white rounded-2xl shadow-sm overflow-hidden" onclick="showReaderView()">
+                            <div class="h-40 bg-gradient-to-r from-purple-50 to-pink-50 flex items-center justify-center">
+                                <i class="ri-file-code-line text-5xl text-purple-400"></i>
+                            </div>
+                            <div class="p-5">
+                                <h3 class="text-lg font-semibold mb-2">练习：B-树</h3>
+                                <p class="text-sm text-gray-500 mb-3">
+                                    <span>2025年1月14日</span>
+                                    <span class="mx-2">·</span>
+                                    <span>2 天前更新</span>
+                                </p>
+                                <div class="flex items-center justify-between mt-4">
+                                    <span class="text-xs text-gray-500">约 10 分钟阅读</span>
+                                    <button class="p-1.5 rounded-full hover:bg-gray-100">
+                                        <i class="ri-more-line text-gray-400"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 阅读视图 - 纵向布局 -->
+    <div id="verticalReaderPage" class="page-transition page-hidden min-h-screen bg-white">
+        <!-- 顶部导航栏 -->
+        <header class="glass sticky top-0 z-50 border-b border-gray-100">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center h-16">
+                    <!-- 面包屑导航 -->
+                    <div class="flex items-center space-x-2 text-sm">
+                        <a href="#" onclick="showHomePage()" class="text-gray-500 hover:text-gray-900 transition-colors">
+                            <i class="ri-home-line"></i> 首页
+                        </a>
+                        <span class="text-gray-400">/</span>
+                        <a href="#" class="text-gray-500 hover:text-gray-900 transition-colors">
+                            算法与数据结构
+                        </a>
+                        <span class="text-gray-400">/</span>
+                        <a href="#" class="text-gray-500 hover:text-gray-900 transition-colors">
+                            ACM Fellow-算法（第 4 版）（完结）
+                        </a>
+                        <span class="text-gray-400">/</span>
+                        <span class="text-gray-700 font-medium">算法.md</span>
+                    </div>
+                    
+                    <div class="flex-1"></div>
+                    
+                    <!-- 右侧工具按钮 -->
+                    <div class="flex items-center space-x-2">
+                        <button class="p-2 rounded-full hover:bg-gray-100 transition-colors" title="沉浸阅读">
+                            <i class="ri-fullscreen-line text-gray-500"></i>
+                        </button>
+                        <button class="p-2 rounded-full hover:bg-gray-100 transition-colors" title="设置">
+                            <i class="ri-settings-4-line text-gray-500"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 主体内容 -->
+        <div class="flex">
+            <!-- 左侧边栏 -->
+            <div class="w-64 border-r border-gray-100 h-[calc(100vh-4rem)] overflow-y-auto">
+                <!-- 搜索框 -->
+                <div class="p-4 border-b border-gray-100">
+                    <div class="relative">
+                        <input type="text" placeholder="搜索文章..." class="w-full px-4 py-2 rounded-lg bg-gray-100 border-none focus:outline-none focus:ring-2 focus:ring-gray-200 text-sm transition-all">
+                        <button class="absolute right-3 top-2 text-gray-400">
+                            <i class="ri-search-line"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 最近访问 -->
+                <div class="p-4 border-b border-gray-100">
+                    <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 mb-3">最近访问</h3>
+                    <ul class="space-y-2">
+                        <li>
+                            <a href="#" class="flex items-center px-3 py-2 text-sm rounded-lg bg-blue-50 text-blue-700">
+                                <i class="ri-file-text-line mr-3 text-blue-500"></i>
+                                <span>算法</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="#" class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 text-gray-700 transition-colors">
+                                <i class="ri-file-text-line mr-3 text-gray-500"></i>
+                                <span>00_开篇词_Web_3.0一场已经开启的互联网革命</span>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- 文件夹导航 -->
+                <div class="p-4">
+                    <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 mb-3">文件夹</h3>
+                    <ul class="space-y-1">
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>deepseek相关文档</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>云计算</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>产品运营</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>人工智能</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg bg-blue-50 cursor-pointer group">
+                                <i class="ri-folder-open-line mr-3 text-blue-500"></i>
+                                <span class="font-medium text-blue-700">算法与数据结构</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>前端开发</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>区块链</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="flex items-center px-3 py-2 text-sm rounded-lg hover:bg-gray-50 cursor-pointer group transition-colors">
+                                <i class="ri-folder-line mr-3 text-blue-400 group-hover:text-blue-500 transition-colors"></i>
+                                <span>大数据</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- 右侧内容区 -->
+            <div class="flex-1 h-[calc(100vh-4rem)] overflow-y-auto">
+                <div class="max-w-4xl mx-auto px-8 py-12">
+                    <h1 class="text-4xl font-bold mb-8">算法</h1>
+                    
+                    <div class="prose prose-lg max-w-none">
+                        <p>
+                            编写一段计算机程序—般都是实现一种已有的<strong>方法</strong>来解决某个问题。这种方法大多和使用的编程语言无关—它适用于各种计算机以及编程语言。是这种方法而非计算机程序本身描述了解决问题的步骤。在计算机科学领域，我们用<strong>算法</strong>这个词来描述一种有限、确定、有效的并适合用计算机来实现的解决问题的方法。算法是计算机科学的基础，是这个领域研究的核心。
+                        </p>
+                        
+                        <p>
+                            要定义一个算法，我们可以用自然语言描述解决某个问题的过程或是编写一段程序来实现这个过程。如发明于 2300 多年前的<strong>欧几里得算法</strong>所示，其目的是找到两个数的最大公约数：
+                        </p>
+                        
+                        <p>
+                            如果你不熟悉欧几里得算法，那么你应该在学习了 1.1 节之后完成练习 1.1.24 和练习 1.1.25。在本书中，我们将用计算机程序来描述算法。这样做的重要原因之一是可以更容易地验证它们是否所要求的那样有限、确定和有效。但你还应该意识到利用其特定语言特性编写一段程序只是实现算法的一种方法，数十年来本书中许多算法都曾被实现为多种编程语言的程序，这正说明每种算法都是适合于在任何计算机上用任何编程语言实现的方法。
+                        </p>
+                        
+                        <p>
+                            我们关注的大多数算法都需要适当地组织数据，而为了组织数据就产生了<strong>数据结构</strong>。数据结构也是计算机科学研究的核心对象，它和算法的关系非常密切。在本书中，我们的观点是数据结构是算法的副产品或是结果，因此要理解算法必须学习数据结构。简单的算法也会产生复杂的数据结构，相应地，复杂的算法也许只需要简单的数据结构。本书中我们将会研讨许多数据结构的性质，也许本书就应该叫做《<strong>算法与数据结构</strong>》。
+                        </p>
+                        
+                        <p>
+                            当用计算机解决一个问题时，一般都存在多种不同的方法。对于小型问题，只要管用，方法的不同并没有什么关系。但是对于大型问题（或者是需要解决大量小型问题的应用），我们就需要设计能够有效利用时间和空间的方法了。
+                        </p>
+                        
+                        <p>
+                            学习算法的主要原因是它们能节约非常多的资源，甚至能够让我们完成一些本不可能完成的任务。在某些需要处理上百万个对象的应用程序中，设计优良的算法甚至可以将程序运行的速度提高数百万倍。在本书中我们将在多个场景中看到这样的例子。与此相反，花费金钱和时间去购置最新的硬件可能只能将速度提高十倍或是百倍，无论在任何应用领域，精心设计的算法都是解决大型问题最有效的方法。
+                        </p>
+                        
+                        <p>
+                            在编写与处理大量复杂的程序时，理解和预测义问题、控制问题的复杂度和将其分解为更容易解决的子问题需要大量的工作。很多时候，分解后的子问题所需的算法实现起来都比较简单，但在大多数情况下，采用算法的选择非常关键的，因为大多数系统资源都将耗费在少数几个关键算法上。本书将帮助你认识到这些情况并提供解决问题的方法。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 悬浮工具栏 -->
+        <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white rounded-full shadow-lg px-4 py-2 flex items-center space-x-4">
+            <button class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500">
+                <i class="ri-text-spacing text-lg"></i>
+            </button>
+            <div class="h-4 border-r border-gray-200"></div>
+            <button class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500">
+                <i class="ri-zoom-out-line text-lg"></i>
+            </button>
+            <span class="text-sm text-gray-700">100%</span>
+            <button class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500">
+                <i class="ri-zoom-in-line text-lg"></i>
+            </button>
+            <div class="h-4 border-r border-gray-200"></div>
+            <button class="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-500">
+                <i class="ri-share-line text-lg"></i>
+            </button>
+        </div>
+    </div>
+    
+    <!-- 修改页面切换脚本，添加新的阅读视图 -->
+    <script>
+        function showReaderView() {
+            document.getElementById('homePage').classList.remove('page-visible');
+            document.getElementById('homePage').classList.add('page-hidden');
+            
+            // 使用纵向阅读视图替代原来的阅读视图
+            document.getElementById('verticalReaderPage').classList.remove('page-hidden');
+            document.getElementById('verticalReaderPage').classList.add('page-visible');
+            
+            // 滚动到顶部
+            window.scrollTo(0, 0);
+        }
+        
+        function showHomePage() {
+            document.getElementById('readerPage').classList.remove('page-visible');
+            document.getElementById('readerPage').classList.add('page-hidden');
+            document.getElementById('verticalReaderPage').classList.remove('page-visible');
+            document.getElementById('verticalReaderPage').classList.add('page-hidden');
+            document.getElementById('homePage').classList.remove('page-hidden');
+            document.getElementById('homePage').classList.add('page-visible');
+            
+            // 滚动到顶部
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>

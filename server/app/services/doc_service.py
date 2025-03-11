@@ -41,8 +41,23 @@ class DocChangeHandler(FileSystemEventHandler):
                 self.doc_service.invalidate_doc_cache(rel_path)
 
 class DocService:
+    _instance = None
+    _observer = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(DocService, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self):
-        self.docs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'static', 'docs')
+        # 如果已经初始化过，直接返回
+        if hasattr(self, '_initialized'):
+            return
+        self._initialized = True
+        
+        # 获取项目根目录
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        self.docs_dir = os.path.join(project_root, 'server', 'static', 'docs')
         logging.debug(f"初始化 DocService, 文档目录路径: {self.docs_dir}")
         
         # 检查是否是符号链接
@@ -59,6 +74,9 @@ class DocService:
                 logging.debug(f"目录内容: {os.listdir(self.docs_dir)}")
             else:
                 logging.error(f"目录不存在: {self.docs_dir}")
+                # 创建目录
+                os.makedirs(self.docs_dir, exist_ok=True)
+                logging.info(f"已创建目录: {self.docs_dir}")
         except Exception as e:
             logging.error(f"访问目录失败: {str(e)}")
         
@@ -91,13 +109,43 @@ class DocService:
         # PDF相关缓存
         self._pdf_metadata_cache = {}
         self._pdf_metadata_ttl = 3600  # 1小时
+
+    def __del__(self):
+        """析构函数，确保在对象被销毁时停止文件监视器"""
+        self._stop_file_watcher()
         
+    def _stop_file_watcher(self):
+        """停止文件监视器"""
+        try:
+            if DocService._observer is not None and DocService._observer.is_alive():
+                DocService._observer.unschedule_all()  # 取消所有监视
+                DocService._observer.stop()
+                DocService._observer.join(timeout=3)  # 等待最多3秒
+                DocService._observer = None
+                logging.debug("文件监视器已停止")
+        except Exception as e:
+            logging.error(f"停止文件监视器时出错: {str(e)}")
+            DocService._observer = None
+
     def _setup_file_watcher(self):
         """设置文件系统监控"""
-        self.event_handler = DocChangeHandler(self)
-        self.observer = Observer()
-        self.observer.schedule(self.event_handler, self.docs_dir, recursive=True)
-        self.observer.start()
+        try:
+            # 如果已经有观察者在运行，先停止它
+            self._stop_file_watcher()
+            
+            # 确保目录存在
+            if not os.path.exists(self.docs_dir):
+                os.makedirs(self.docs_dir, exist_ok=True)
+                
+            # 创建新的观察者
+            self.event_handler = DocChangeHandler(self)
+            DocService._observer = Observer()
+            DocService._observer.schedule(self.event_handler, self.docs_dir, recursive=True)
+            DocService._observer.start()
+            logging.debug(f"文件监视器已启动，监视目录: {self.docs_dir}")
+        except Exception as e:
+            logging.error(f"设置文件监视器失败: {str(e)}")
+            DocService._observer = None
 
     @asynccontextmanager
     async def _cache_lock(self, cache_key: str):
@@ -369,7 +417,7 @@ class DocService:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {mime_type}")
 
     async def get_recent_docs(self, limit: int = 10) -> List[Dict]:
-        """获取最近更新的文档，带缓存"""
+        """获取最近更新的文档，带缓存，支持 PDF 文件"""
         async with self._cache_lock("recent_docs"):
             current_time = time.time()
             
@@ -379,32 +427,59 @@ class DocService:
                 return self._recent_docs_cache[:limit]
 
             docs = []
-            # 使用同步文件系统操作，因为 os.walk 是同步的
-            for root, _, files in os.walk(self.docs_dir):
-                md_files = [f for f in files if f.endswith('.md')]
-                for file in md_files:
-                    file_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(file_path, self.docs_dir)
-                    # 使用同步的 os.stat 而不是异步版本
-                    stat = os.stat(file_path)
-                    docs.append({
-                        "path": rel_path.replace('\\', '/'),
-                        "name": file,
-                        "last_modified": stat.st_mtime
-                    })
+            try:
+                # 使用同步文件系统操作，因为 os.walk 是同步的
+                for root, _, files in os.walk(self.docs_dir):
+                    # 同时处理 .md 和 .pdf 文件
+                    doc_files = [f for f in files if f.endswith(('.md', '.pdf'))]
+                    for file in doc_files:
+                        try:
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, self.docs_dir)
+                            # 使用同步的 os.stat 而不是异步版本
+                            stat = os.stat(file_path)
+                            
+                            doc_info = {
+                                "path": rel_path.replace('\\', '/'),
+                                "name": file,
+                                "last_modified": stat.st_mtime,
+                                "size": stat.st_size,
+                                "type": "pdf" if file.endswith('.pdf') else "markdown"
+                            }
+                            
+                            # 如果是 PDF，获取页数
+                            if file.endswith('.pdf'):
+                                try:
+                                    page_count = self._get_pdf_page_count(file_path)
+                                    doc_info["page_count"] = page_count
+                                    # PDF 的阅读时间基于页数估算，假设每页 2 分钟
+                                    doc_info["estimated_reading_time"] = page_count * 2
+                                except Exception as e:
+                                    logging.error(f"获取PDF信息失败 {file_path}: {str(e)}")
+                                    continue
+                            
+                            docs.append(doc_info)
+                        except Exception as e:
+                            logging.error(f"处理文件失败 {file}: {str(e)}")
+                            continue
 
-            # 按最后修改时间排序
-            docs.sort(key=lambda x: x["last_modified"], reverse=True)
-            
-            # 转换时间格式
-            for doc in docs:
-                doc["last_modified"] = datetime.fromtimestamp(doc["last_modified"]).isoformat()
+                # 按最后修改时间排序
+                docs.sort(key=lambda x: x["last_modified"], reverse=True)
+                
+                # 转换时间格式
+                for doc in docs:
+                    doc["last_modified"] = datetime.fromtimestamp(doc["last_modified"]).isoformat()
 
-            # 更新缓存
-            self._recent_docs_cache = docs
-            self._recent_docs_last_check = current_time
-            
-            return docs[:limit]
+                # 更新缓存
+                self._recent_docs_cache = docs
+                self._recent_docs_last_check = current_time
+                
+                logging.debug(f"找到 {len(docs)} 个最近文档")
+                return docs[:limit]
+                
+            except Exception as e:
+                logging.error(f"获取最近文档失败: {str(e)}")
+                return []
 
     async def get_breadcrumb(self, path: str) -> List[Dict]:
         """获取文档的面包屑导航，带缓存"""

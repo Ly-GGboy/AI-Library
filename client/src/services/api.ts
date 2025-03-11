@@ -42,8 +42,12 @@ export interface DocTree {
 export interface DocContent {
   path: string
   name: string
-  content: string
+  content?: string
   last_modified: string
+  size?: number
+  type?: 'markdown' | 'pdf'
+  page_count?: number
+  estimated_reading_time?: number
 }
 
 export interface SearchResult {

@@ -9,50 +9,6 @@
 
     <!-- 主内容区域 -->
     <div class="nav-content" :class="{ 'hidden': isNavHidden && isMobile }">
-      <!-- 搜索框 -->
-      <div class="search-box">
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="搜索文章..."
-          class="search-input"
-        />
-      </div>
-
-      <!-- 最近访问 -->
-      <div v-if="recentArticles.length > 0" class="recent-articles">
-        <div class="section-title">最近访问</div>
-        <div v-for="article in recentArticles" :key="article.path" class="recent-article">
-          <router-link
-            :to="{ name: 'doc', params: { path: article.path } }"
-            class="recent-article-link"
-            :class="{ 'active': isCurrentArticle(article.path) }"
-          >
-            <DocumentTextIcon class="w-4 h-4" :class="isCurrentArticle(article.path) ? 'text-primary-500' : 'text-gray-500'" />
-            <div class="article-name-container">
-              <span 
-                class="article-name" 
-                :class="{ 'expanded': expandedArticles.has(article.path) }"
-                :title="!expandedArticles.has(article.path) ? article.name : ''"
-              >
-                {{ article.name }}
-              </span>
-              <button 
-                v-if="needsExpansion(article.name)"
-                class="expand-button"
-                @click.prevent="toggleArticleExpand(article.path)"
-                :title="expandedArticles.has(article.path) ? '收起' : '展开'"
-              >
-                <component
-                  :is="expandedArticles.has(article.path) ? 'ChevronDoubleUpIcon' : 'ChevronDoubleDownIcon'"
-                  class="w-3 h-3"
-                />
-              </button>
-            </div>
-          </router-link>
-        </div>
-      </div>
-
       <!-- 文档树 -->
       <div v-if="loading" class="loading">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
@@ -61,7 +17,8 @@
         {{ error }}
       </div>
       <div v-else-if="docTree" class="tree-container" ref="treeContainer">
-        <TreeNode :node="docTree" :filter="searchQuery" />
+        <h3 class="section-title">文件夹</h3>
+        <TreeNode :node="docTree" :filter="filter" />
       </div>
       <div v-else class="empty">
         暂无文档
@@ -79,10 +36,20 @@ import { storeToRefs } from 'pinia'
 import { useRoute } from 'vue-router'
 import { DocumentTextIcon, ChevronDoubleDownIcon, ChevronDoubleUpIcon } from '@heroicons/vue/24/outline'
 
+const props = defineProps({
+  loadData: {
+    type: Boolean,
+    default: true
+  },
+  filter: {
+    type: String,
+    default: ''
+  }
+})
+
 const route = useRoute()
 const docStore = useDocStore()
 const { docTree, loading, error } = storeToRefs(docStore)
-const searchQuery = ref('')
 const treeContainer = ref<HTMLElement | null>(null)
 const isNavHidden = ref(false)
 
@@ -107,14 +74,19 @@ onMounted(() => {
 
 // 最近访问的文章
 const RECENT_ARTICLES_KEY = 'recent-articles'
-const MAX_RECENT_ARTICLES = 5
+const MAX_RECENT_ARTICLES = 6
 const recentArticles = ref<Array<{path: string, name: string}>>([])
 
 // 从 localStorage 加载最近访问的文章
 const loadRecentArticles = () => {
   const saved = localStorage.getItem(RECENT_ARTICLES_KEY)
   if (saved) {
-    recentArticles.value = JSON.parse(saved)
+    try {
+      recentArticles.value = JSON.parse(saved)
+    } catch (e) {
+      console.error('Failed to parse recent articles:', e)
+      recentArticles.value = []
+    }
   }
 }
 
@@ -124,7 +96,10 @@ const addToRecentArticles = (path: string) => {
   
   // 从文档树中查找文章名称
   const findArticleName = (node: any, path: string): string | null => {
-    if (node.path === path) return node.name.replace('.md', '')
+    if (node.path === path) {
+      // 移除 .md 或 .pdf 后缀
+      return node.name.replace(/\.(md|pdf)$/, '')
+    }
     if (node.children) {
       for (const child of node.children) {
         const found = findArticleName(child, path)
@@ -135,15 +110,35 @@ const addToRecentArticles = (path: string) => {
   }
 
   const name = findArticleName(docTree.value, path)
+  console.log('Found article name:', name, 'for path:', path)
   if (!name) return
 
   const article = { path, name }
-  recentArticles.value = [
-    article,
-    ...recentArticles.value.filter(a => a.path !== path)
-  ].slice(0, MAX_RECENT_ARTICLES)
+  console.log('Current recent articles before update:', recentArticles.value)
   
-  localStorage.setItem(RECENT_ARTICLES_KEY, JSON.stringify(recentArticles.value))
+  // 移除已存在的相同文章（如果有）
+  const existingIndex = recentArticles.value.findIndex(a => a.path === path)
+  if (existingIndex !== -1) {
+    recentArticles.value.splice(existingIndex, 1)
+  }
+  
+  // 在开头添加新文章
+  recentArticles.value.unshift(article)
+  
+  // 如果超过6条记录，只保留最新的6条
+  if (recentArticles.value.length > MAX_RECENT_ARTICLES) {
+    recentArticles.value = recentArticles.value.slice(0, MAX_RECENT_ARTICLES)
+  }
+  
+  console.log('Updated recent articles:', recentArticles.value)
+  
+  // 保存到 localStorage
+  try {
+    localStorage.setItem(RECENT_ARTICLES_KEY, JSON.stringify(recentArticles.value))
+    console.log('Saved recent articles to localStorage')
+  } catch (e) {
+    console.error('Failed to save recent articles:', e)
+  }
 }
 
 // 检查是否是当前文章
@@ -172,41 +167,12 @@ watch(
   { immediate: true }
 )
 
-// 添加展开状态控制
-const expandedArticles = ref(new Set<string>())
-
-// 检查标题是否过长需要展开
-const needsExpansion = (name: string) => {
-  const maxLength = 30 // 可以根据实际需求调整
-  return name.length > maxLength
-}
-
-// 切换标题展开状态
-const toggleArticleExpand = (path: string) => {
-  if (expandedArticles.value.has(path)) {
-    expandedArticles.value.delete(path)
-  } else {
-    expandedArticles.value.add(path)
-  }
-}
-
 onMounted(async () => {
-  if (!docTree.value) {
+  // 只有在props.loadData为true时才加载文档树
+  if (!docTree.value && props.loadData) {
     await docStore.loadDocTree()
   }
   loadRecentArticles()
-  
-  // 如果有最后访问的文章，滚动到其位置
-  const lastVisited = recentArticles.value[0]?.path
-  if (lastVisited && treeContainer.value) {
-    // 等待树渲染完成
-    setTimeout(() => {
-      const element = treeContainer.value?.querySelector(`[href*="${lastVisited}"]`)
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
-    }, 500)
-  }
 })
 </script>
 
@@ -216,7 +182,7 @@ onMounted(async () => {
 }
 
 .nav-content {
-  @apply flex-1 flex flex-col transition-all duration-300 ease-in-out;
+  @apply flex-1 flex flex-col h-full transition-all duration-300 ease-in-out;
 }
 
 /* 移动端样式 */
@@ -232,84 +198,15 @@ onMounted(async () => {
   .nav-content.hidden {
     @apply -translate-x-full opacity-0;
   }
-
-  .search-box {
-    @apply sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm z-10;
-  }
-}
-
-.search-box {
-  @apply p-4 border-b dark:border-gray-700;
-}
-
-.search-input {
-  @apply w-full px-3 py-2 rounded-lg border border-gray-300 
-    focus:border-primary-500 focus:ring-1 focus:ring-primary-500
-    dark:bg-gray-800 dark:border-gray-600 
-    dark:text-gray-200 dark:placeholder-gray-400
-    dark:focus:border-primary-400 dark:focus:ring-primary-400;
-}
-
-.recent-articles {
-  @apply p-4 border-b dark:border-gray-700;
 }
 
 .section-title {
-  @apply text-sm font-medium text-gray-500 mb-2 dark:text-gray-400;
-}
-
-.recent-article {
-  @apply mb-1;
-}
-
-.recent-article-link {
-  @apply flex items-start gap-2 px-2 py-1.5 rounded 
-    hover:bg-gray-100 transition-colors duration-200
-    dark:hover:bg-gray-800;
-  min-width: 0;
-}
-
-.recent-article-link.active {
-  @apply bg-primary-50 hover:bg-primary-100
-    dark:bg-primary-900/30 dark:hover:bg-primary-900/40;
-}
-
-.article-name-container {
-  @apply flex items-center min-w-0 flex-1;
-  max-width: 300px; /* 调整最大宽度 */
-}
-
-.article-name {
-  @apply text-sm text-gray-700 dark:text-gray-300 min-w-0 flex-1
-    whitespace-normal break-words leading-relaxed;
-  word-break: break-word;
-}
-
-.article-name.expanded {
-  /* 展开后换行显示 */
-  @apply whitespace-normal break-words;
-  word-break: break-word;
-}
-
-.expand-button {
-  display: none;
-}
-
-/* 优化换行后的间距 */
-.recent-article-link {
-  @apply flex items-start gap-2 px-2 py-1.5 rounded 
-    hover:bg-gray-100 transition-colors duration-200
-    dark:hover:bg-gray-800;
-  min-width: 0;
-}
-
-/* 图标垂直对齐 */
-.recent-article-link > :first-child {
-  @apply mt-1;
+  @apply text-sm font-medium uppercase tracking-wider text-gray-500 mb-3 pl-1 dark:text-gray-400;
 }
 
 .tree-container {
-  @apply flex-1 overflow-y-auto p-4;
+  @apply flex-1 overflow-y-auto px-0 py-2;
+  height: calc(100% - 2rem); /* 减去标题的高度 */
 }
 
 .loading {
@@ -323,5 +220,27 @@ onMounted(async () => {
 
 .empty {
   @apply text-gray-500 text-center py-8 dark:text-gray-400;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style> 

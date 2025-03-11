@@ -1,47 +1,78 @@
 <template>
-  <div class="doc-view">
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ol class="breadcrumb-list">
-        <li class="breadcrumb-item">
-          <router-link to="/" class="breadcrumb-link">
-            <HomeIcon class="breadcrumb-icon" />
-            首页
-          </router-link>
-        </li>
-        <li
-          v-for="(item, index) in breadcrumb"
-          :key="item.path"
-          class="breadcrumb-item"
-        >
-          <ChevronRightIcon class="breadcrumb-separator" />
-          <span
-            v-if="index === breadcrumb.length - 1"
-            class="breadcrumb-current"
-          >
-            {{ item.name }}
-          </span>
-          <router-link
-            v-else
-            :to="{ name: 'home', hash: `#${item.path}` }"
-            class="breadcrumb-link"
-          >
-            {{ item.name }}
-          </router-link>
-        </li>
-      </ol>
-    </nav>
+  <div class="doc-view min-h-screen bg-white dark:bg-gray-900">
+    <!-- 顶部导航栏 -->
+    <header class="glass sticky top-0 z-50 border-b border-gray-100 dark:border-gray-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center h-16">
+          <!-- 面包屑导航 -->
+          <nav class="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
+            <router-link to="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+              <HomeIcon class="w-5 h-5" />
+            </router-link>
+            <span class="text-gray-400 dark:text-gray-600">/</span>
+            <template v-for="(item, index) in breadcrumb" :key="item.path">
+              <router-link
+                v-if="index !== breadcrumb.length - 1"
+                :to="{ name: 'home', hash: `#${item.path}` }"
+                class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+              >
+                {{ item.name }}
+              </router-link>
+              <span
+                v-else
+                class="text-gray-700 dark:text-gray-300 font-medium"
+              >
+                {{ item.name }}
+              </span>
+              <span v-if="index !== breadcrumb.length - 1" class="text-gray-400 dark:text-gray-600">/</span>
+            </template>
+          </nav>
+          
+          <div class="flex-1"></div>
+          
+  
+        </div>
+      </div>
+    </header>
 
-    <main class="main">
-      <aside class="sidebar">
-        <DocTree />
+    <!-- 主体内容 -->
+    <div class="flex">
+      <!-- 左侧边栏 -->
+      <aside class="w-64 border-r border-gray-100 dark:border-gray-800 h-[calc(100vh-4rem)] overflow-y-auto">
+        <!-- 搜索框 -->
+        <div class="p-4 border-b border-gray-100 dark:border-gray-800">
+          <div class="relative">
+            <input 
+              v-model="searchQuery"
+              type="text" 
+              placeholder="搜索文章..." 
+              class="w-full px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 border-none focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700 text-sm transition-all"
+            >
+            <button class="absolute right-3 top-2 text-gray-400 dark:text-gray-500">
+              <MagnifyingGlassIcon class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        
+        <!-- 最近访问 -->
+        <div class="p-4 border-b border-gray-100 dark:border-gray-800">
+          <h3 class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">最近访问</h3>
+          <RecentDocs />
+        </div>
+
+        <!-- 文档导航树 -->
+        <div class="p-4">
+          <DocTree :load-data="true" :filter="searchQuery" />
+        </div>
       </aside>
 
-      <article class="article">
-        <ImmersiveReader>
-          <div v-if="loading" class="loading">
+      <!-- 右侧内容区 -->
+      <main class="flex-1 h-[calc(100vh-4rem)] overflow-y-auto">
+        <div class="max-w-5xl mx-auto px-8 py-12">
+          <div v-if="loading" class="loading flex justify-center items-center py-8">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
           </div>
-          <div v-else-if="error" class="error">
+          <div v-else-if="error" class="error text-red-500 dark:text-red-400 p-4 rounded bg-red-50 dark:bg-red-900/20">
             {{ error }}
           </div>
           <div v-else-if="currentDoc">
@@ -50,49 +81,80 @@
               :content="currentDoc.content || ''" 
               :loading="loading" 
               :error="error"
+              class="prose prose-lg max-w-none dark:prose-invert"
             />
             <PDFViewer 
               v-else
               :path="currentDoc.path"
+              class="w-full"
             />
           </div>
-          <div v-else class="no-content">
+          <div v-else class="text-gray-500 dark:text-gray-400 text-center py-8">
             未找到文档内容
           </div>
-        </ImmersiveReader>
-        
-        <div v-if="currentDoc && !isPDFDoc" class="doc-navigation">
-          <router-link
-            v-if="prevDoc"
-            :to="{ name: 'doc', params: { path: prevDoc.path } }"
-            class="prev-link"
-          >
-            <ChevronLeftIcon class="w-5 h-5" />
-            <span>{{ prevDoc.name }}</span>
-          </router-link>
-          <router-link
-            v-if="nextDoc"
-            :to="{ name: 'doc', params: { path: nextDoc.path } }"
-            class="next-link"
-          >
-            <span>{{ nextDoc.name }}</span>
-            <ChevronRightIcon class="w-5 h-5" />
-          </router-link>
+          
+          <!-- 文档导航 -->
+          <div v-if="currentDoc && !isPDFDoc" class="doc-navigation mt-8 flex justify-between items-center">
+            <router-link
+              v-if="prevDoc"
+              :to="{ name: 'doc', params: { path: prevDoc.path } }"
+              class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              <ChevronLeftIcon class="w-5 h-5" />
+              <span>{{ prevDoc.name }}</span>
+            </router-link>
+            <router-link
+              v-if="nextDoc"
+              :to="{ name: 'doc', params: { path: nextDoc.path } }"
+              class="flex items-center space-x-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              <span>{{ nextDoc.name }}</span>
+              <ChevronRightIcon class="w-5 h-5" />
+            </router-link>
+          </div>
         </div>
-      </article>
-    </main>
+      </main>
+    </div>
+
+    <!-- 悬浮工具栏 -->
+    <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-2 flex items-center space-x-4">
+      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+        <Bars3Icon class="w-5 h-5" />
+      </button>
+      <div class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
+      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+        <MagnifyingGlassMinusIcon class="w-5 h-5" />
+      </button>
+      <span class="text-sm text-gray-700 dark:text-gray-300">100%</span>
+      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+        <MagnifyingGlassPlusIcon class="w-5 h-5" />
+      </button>
+      <div class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
+      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+        <ShareIcon class="w-5 h-5" />
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, computed } from 'vue'
+import { onMounted, watch, computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
-import { HomeIcon, ChevronRightIcon, ChevronLeftIcon } from '@heroicons/vue/24/outline'
+import { 
+  HomeIcon, 
+  ChevronRightIcon, 
+  ChevronLeftIcon,
+  MagnifyingGlassIcon,
+  MagnifyingGlassMinusIcon,
+  MagnifyingGlassPlusIcon,
+  Bars3Icon,
+  ShareIcon
+} from '@heroicons/vue/24/outline'
 import DocTree from '../components/DocTree.vue'
 import MarkdownViewer from '../components/MarkdownViewer.vue'
 import PDFViewer from '../components/PDFViewer.vue'
-import ImmersiveReader from '../components/ImmersiveReader.vue'
+import RecentDocs from '../components/RecentDocs.vue'
 import { storeToRefs } from 'pinia'
 import type { DocContent } from '../services/api'
 
@@ -150,6 +212,15 @@ const loadContent = async () => {
     }
   }
 }
+
+// 初始化加载
+onMounted(async () => {
+  // 确保文档树已加载
+  if (!docTree.value) {
+    await docStore.loadDocTree()
+  }
+  await loadContent()
+})
 
 // 优化查找当前文档在文档树中的位置的函数
 const findCurrentDocPosition = () => {
@@ -421,8 +492,6 @@ const handleNavigate = (path: string) => {
   router.push({ name: 'doc', params: { path } })
 }
 
-onMounted(loadContent)
-
 watch(() => route.params.path, async (path) => {
   if (path) {
     try {
@@ -441,135 +510,89 @@ watch(() => route.params.path, async (path) => {
     }
   }
 }, { immediate: true })
+
+const searchQuery = ref('')
 </script>
 
 <style scoped>
-.doc-view {
-  @apply min-h-screen bg-gray-50 dark:bg-gray-900;
+/* 毛玻璃效果 */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.breadcrumb {
-  @apply bg-white shadow-sm py-2 px-6 sticky top-0 z-10 dark:bg-gray-800;
-  height: 3rem;
+.dark .glass {
+  background: rgba(31, 41, 55, 0.8);
 }
 
-.breadcrumb-list {
-  @apply flex items-center max-w-[1200px] mx-auto h-full;
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.breadcrumb-item {
-  @apply flex items-center;
+/* 文档内容样式 */
+:deep(.prose) {
+  max-width: none;
 }
 
-.breadcrumb-link {
-  @apply flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-50;
+:deep(.prose pre) {
+  background-color: #f8f9fa;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1.5rem 0;
 }
 
-.breadcrumb-current {
-  @apply text-gray-900 dark:text-gray-50;
+.dark :deep(.prose pre) {
+  background-color: #1f2937;
 }
 
-.breadcrumb-icon {
-  @apply w-5 h-5 mr-1;
+:deep(.prose img) {
+  border-radius: 0.5rem;
+  margin: 1.5rem 0;
 }
 
-.breadcrumb-separator {
-  @apply w-5 h-5 text-gray-400 mx-2 dark:text-gray-500;
+:deep(.prose h1) {
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
 }
 
-.main {
-  @apply flex relative max-w-[1200px] mx-auto;
-  min-height: calc(100vh - 3rem);
+:deep(.prose h2) {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 2rem 0 1rem;
 }
 
-.sidebar {
-  @apply w-64 flex-shrink-0 bg-white shadow-lg fixed h-[calc(100vh-3rem)] overflow-y-auto 
-    dark:bg-gray-800 dark:border-gray-700;
-  left: max(0px, calc(50% - 600px));
-  top: 3rem;
+:deep(.prose h3) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.75rem;
 }
 
-.article {
-  @apply flex-grow bg-white w-0 dark:bg-gray-800;
-  margin-left: calc(max(0px, calc(50% - 600px)) + 256px);
-  width: calc(min(1200px, 100%) - 256px);
-  padding-top: 3rem;
-}
-
-.doc-navigation {
-  @apply flex justify-between mt-8 px-6 pb-6 border-t pt-6 
-    border-gray-200 dark:border-gray-700;
-}
-
-.prev-link, .next-link {
-  @apply flex items-center gap-4 text-gray-600 hover:text-gray-900 transition-colors max-w-[45%]
-    dark:text-gray-400 dark:hover:text-gray-50;
-}
-
-.nav-placeholder {
-  @apply w-[45%];
-}
-
-.nav-icon {
-  @apply w-5 h-5 flex-shrink-0;
-}
-
-.nav-content {
-  @apply flex flex-col;
-}
-
-.nav-label {
-  @apply text-sm text-gray-500 dark:text-gray-500;
-}
-
-.nav-title {
-  @apply text-base font-medium truncate dark:text-gray-300;
-}
-
-.prev {
-  @apply text-left;
-}
-
-.next {
-  @apply text-right;
-}
-
-/* 添加响应式布局 */
-@media (max-width: 1200px) {
-  .main {
-    @apply px-0;
-  }
-  
-  .sidebar {
-    @apply fixed left-0 z-20;
-    transform: translateX(-100%);
-    transition: transform 0.3s ease-in-out;
-  }
-  
-  .sidebar.active {
-    transform: translateX(0);
-  }
-  
-  .article {
-    @apply ml-0;
-    width: 100%;
-  }
-}
-
-.loading {
-  @apply flex justify-center items-center min-h-[200px];
-}
-
-.error {
-  @apply text-red-500 p-4 text-center;
-}
-
-.no-content {
-  @apply text-gray-500 p-4 text-center;
-}
-
-/* 调整全局控制栏位置 */
-:global(.global-controls) {
-  top: 4rem !important;
+:deep(.prose p) {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  margin-bottom: 1.25rem;
 }
 </style>
