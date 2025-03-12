@@ -644,46 +644,11 @@ onUnmounted(() => {
 }
 
 .setting-item input[type="range"] {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 6px;
-  background: rgba(var(--text-color), 0.1);
-  border-radius: 3px;
-  outline: none;
+  width: 120px;
 }
 
-.dark input[type="range"] {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--primary-color);
-  cursor: pointer;
-}
-
-input[type="range"]:disabled {
-  opacity: 0.5;
-}
-
-input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin-right: 8px;
-  accent-color: var(--primary-color);
-}
-
-.dark input[type="checkbox"] {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-input[type="checkbox"]:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.setting-item input[type="checkbox"] {
+  margin-right: 0.5rem;
 }
 
 .setting-item span {
