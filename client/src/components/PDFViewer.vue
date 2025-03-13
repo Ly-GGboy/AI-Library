@@ -68,11 +68,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
-import * as pdfjsLib from 'pdfjs-dist'
-import { GlobalWorkerOptions } from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/build/pdf'
+import 'pdfjs-dist/build/pdf.worker.min'
 
 // 设置 worker 路径
-GlobalWorkerOptions.workerSrc = '/pdf/pdf.worker.min.mjs'
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.js`
 
 const props = defineProps<{
   path: string

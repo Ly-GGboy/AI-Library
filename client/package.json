@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "node copy-pdf-worker.js && vite",
+    "build": "node copy-pdf-worker.js && vite build",
+    "build:type-check": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

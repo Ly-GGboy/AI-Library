@@ -1,41 +1,36 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { fileURLToPath, URL } from 'url'
 import fs from 'fs'
-import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
-      'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist/build/pdf.js'),
-    },
-  },
-  optimizeDeps: {
-    include: ['pdfjs-dist/build/pdf']
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    }
   },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
-          pdfjs: ['pdfjs-dist/build/pdf']
+          'pdf.worker': ['pdfjs-dist/build/pdf.worker.min']
         }
       }
     }
   },
   server: {
     https: {
-      key: fs.readFileSync(path.resolve(__dirname, '../server/key.pem')),
-      cert: fs.readFileSync(path.resolve(__dirname, '../server/cert.pem')),
+      key: fs.readFileSync('./etc/nginx/ssl/private.key'),
+      cert: fs.readFileSync('/etc/nginx/ssl/certificate.crt'),
     },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000/',
-        secure: false,  // 因为我们用的是自签名证书
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        ws: true,  // 支持 WebSocket
+        ws: true
       }
     }
-  },
+  }
 })
