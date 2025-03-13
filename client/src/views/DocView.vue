@@ -4,6 +4,15 @@
     <header class="glass sticky top-0 z-50 border-b border-gray-100 dark:border-gray-800">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center h-16">
+          <!-- 移动端菜单按钮 -->
+          <button 
+            v-if="isMobile" 
+            @click="toggleSidebar"
+            class="mr-2 p-2 rounded-md text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+          >
+            <Bars3Icon class="w-5 h-5" />
+          </button>
+          
           <!-- 面包屑导航 -->
           <nav class="flex items-center space-x-2 text-sm" aria-label="Breadcrumb">
             <router-link to="/" class="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
@@ -36,9 +45,23 @@
     </header>
 
     <!-- 主体内容 -->
-    <div class="flex">
+    <div class="flex relative">
+      <!-- 移动端遮罩层 -->
+      <div 
+        v-if="isMobile && sidebarOpen" 
+        class="fixed inset-0 bg-black bg-opacity-50 z-40"
+        @click="toggleSidebar"
+      ></div>
+      
       <!-- 左侧边栏 -->
-      <aside class="w-64 border-r border-gray-100 dark:border-gray-800 h-[calc(100vh-4rem)] overflow-y-auto">
+      <aside 
+        class="sidebar transition-all duration-300 border-r border-gray-100 dark:border-gray-800 h-[calc(100vh-4rem)] overflow-y-auto"
+        :class="{
+          'w-64': !isMobile || (isMobile && sidebarOpen),
+          'w-0 -ml-64': isMobile && !sidebarOpen,
+          'fixed left-0 top-16 z-50 bg-white dark:bg-gray-900': isMobile
+        }"
+      >
         <!-- 搜索框 -->
         <div class="p-4 border-b border-gray-100 dark:border-gray-800">
           <div class="relative">
@@ -67,8 +90,11 @@
       </aside>
 
       <!-- 右侧内容区 -->
-      <main class="flex-1 h-[calc(100vh-4rem)] overflow-y-auto">
-        <div class="max-w-5xl mx-auto px-8 py-12">
+      <main 
+        class="flex-1 h-[calc(100vh-4rem)] overflow-y-auto transition-all duration-300"
+        :class="{ 'pl-0': isMobile }"
+      >
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div v-if="loading" class="loading flex justify-center items-center py-8">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
           </div>
@@ -118,10 +144,14 @@
 
     <!-- 悬浮工具栏 -->
     <div class="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 rounded-full shadow-lg px-4 py-2 flex items-center space-x-4 z-50">
-      <button class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400">
+      <button 
+        v-if="isMobile"
+        @click="toggleSidebar" 
+        class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400"
+      >
         <Bars3Icon class="w-5 h-5" />
       </button>
-      <div class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
+      <div v-if="isMobile" class="h-4 border-r border-gray-200 dark:border-gray-700"></div>
       <button 
         @click="zoomOut"
         class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 dark:text-gray-400"
@@ -146,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, computed, ref } from 'vue'
+import { onMounted, watch, computed, ref, onBeforeMount, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
 import { 
@@ -170,6 +200,41 @@ const route = useRoute()
 const router = useRouter()
 const docStore = useDocStore()
 const { currentDoc, loading, error, docTree } = storeToRefs(docStore)
+
+// 移动端响应式处理
+const isMobile = ref(false)
+const sidebarOpen = ref(false)
+
+// 检测设备类型
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 768
+  // 在移动端默认关闭侧边栏，桌面端默认打开
+  sidebarOpen.value = !isMobile.value
+}
+
+// 切换侧边栏
+const toggleSidebar = () => {
+  sidebarOpen.value = !sidebarOpen.value
+  // 如果在移动端打开侧边栏后选择了文档，自动关闭侧边栏
+  if (isMobile.value && sidebarOpen.value) {
+    // 使用一次性的路由监听来关闭侧边栏
+    const unwatch = watch(() => route.params.path, () => {
+      sidebarOpen.value = false
+      unwatch() // 清理监听器
+    }, { immediate: false })
+  }
+}
+
+// 监听窗口大小变化
+onBeforeMount(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+})
 
 // 计算面包屑
 const breadcrumb = computed(() => {
@@ -211,6 +276,17 @@ const loadContent = async () => {
         await docStore.loadDocContent(path)
       }
       console.log('DocView: Content loaded, currentDoc:', currentDoc.value)
+      
+      // 在移动端加载完内容后关闭侧边栏
+      if (isMobile.value) {
+        sidebarOpen.value = false
+      }
+      
+      // 确保内容区域滚动到顶部
+      const mainElement = document.querySelector('main')
+      if (mainElement) {
+        mainElement.scrollTop = 0
+      }
     } catch (err) {
       console.error('Error loading content:', err)
       docStore.$patch({ 
@@ -226,6 +302,11 @@ onMounted(async () => {
   // 确保文档树已加载
   if (!docTree.value) {
     await docStore.loadDocTree()
+  }
+  
+  // 如果有路径参数，加载内容
+  if (route.params.path) {
+    await loadContent()
   }
 })
 
@@ -630,5 +711,12 @@ const zoomOut = () => {
 main {
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+/* 移动端响应式样式 */
+@media (max-width: 767px) {
+  .sidebar {
+    transition: all 0.3s ease-in-out;
+  }
 }
 </style>

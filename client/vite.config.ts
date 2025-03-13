@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath, URL } from 'url'
-import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -21,10 +20,6 @@ export default defineConfig({
     }
   },
   server: {
-    https: {
-      key: fs.readFileSync('./etc/nginx/ssl/private.key'),
-      cert: fs.readFileSync('/etc/nginx/ssl/certificate.crt'),
-    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
