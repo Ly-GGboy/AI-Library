@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
-import DocView from '../views/DocView.vue'
-import SearchView from '../views/SearchView.vue'
-import AdminDashboard from '../views/AdminDashboard.vue'
+
+// 使用动态导入实现路由懒加载
+const HomeView = () => import('../views/HomeView.vue')
+const DocView = () => import('../views/DocView.vue')
+const SearchView = () => import('../views/SearchView.vue')
+const AdminDashboard = () => import('../views/AdminDashboard.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -10,17 +12,26 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView
+      component: HomeView,
+      meta: {
+        title: 'AI Library - 首页'
+      }
     },
     {
       path: '/doc/:path(.*)',
       name: 'doc',
-      component: DocView
+      component: DocView,
+      meta: {
+        title: 'AI Library - 文档阅读'
+      }
     },
     {
       path: '/search',
       name: 'search',
-      component: SearchView
+      component: SearchView,
+      meta: {
+        title: 'AI Library - 搜索结果'
+      }
     },
     {
       path: '/admin',
@@ -30,7 +41,25 @@ const router = createRouter({
         title: '管理后台 - AI Library'
       }
     }
-  ]
+  ],
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else if (to.hash) {
+      return {
+        el: to.hash,
+        behavior: 'smooth'
+      }
+    } else {
+      return { top: 0 }
+    }
+  }
+})
+
+// 动态设置页面标题
+router.beforeEach((to, from, next) => {
+  document.title = to.meta.title as string || 'AI Library'
+  next()
 })
 
 export default router 
