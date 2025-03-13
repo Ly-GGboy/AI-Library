@@ -86,9 +86,5 @@ export default defineConfig({
       '@heroicons/vue/24/outline'
     ],
     exclude: ['pdfjs-dist/build/pdf.worker.min']
-  },
-  // 启用esbuild转换
-  esbuild: {
-    pure: ['console.log', 'debugger'],
   }
 })

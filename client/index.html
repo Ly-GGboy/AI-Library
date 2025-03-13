@@ -22,10 +22,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     
     <title>AI Library - 文档中心</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
     
     <!-- 内联关键CSS -->
     <style>
@@ -56,10 +52,19 @@
       @keyframes spin {
         to { transform: rotate(360deg); }
       }
-      /* 避免FOUC (Flash of Unstyled Content) */
-      html { visibility: hidden; }
-      .js-loaded html { visibility: visible; }
+      /* 避免FOUC (Flash of Unstyled Content) - 修复选择器 */
+      html:not(.js-loaded) { 
+        visibility: hidden; 
+      }
+      html.js-loaded { 
+        visibility: visible; 
+      }
     </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+    
     <script>
       // 检测暗黑模式
       if (localStorage.getItem('color-theme') === 'dark' || 
