@@ -73,7 +73,6 @@ class DocService:
         try:
             if os.path.exists(self.docs_dir):
                 logging.debug(f"目录存在: {self.docs_dir}")
-                logging.debug(f"目录内容: {os.listdir(self.docs_dir)}")
             else:
                 logging.error(f"目录不存在: {self.docs_dir}")
                 # 创建目录
@@ -84,33 +83,29 @@ class DocService:
         
         mimetypes.init()
 
-        # 缓存相关
+        # 缓存相关 - 减少缓存大小
         self._doc_tree_cache = None
-        self._doc_tree_last_modified = 0
-        self._doc_tree_version = 0
         
         self._content_cache = {}
-        self._content_cache_size = 100    # 最多缓存100个文档
-        self._content_cache_ttl = 3600    # 缓存1小时
+        self._content_cache_size = 50    # 减少缓存大小
+        self._content_cache_ttl = 3600   # 缓存1小时
         
         self._recent_docs_cache = None
         self._recent_docs_last_check = 0
-        self._recent_docs_ttl = 1800      # 缓存30分钟
+        self._recent_docs_ttl = 1800     # 缓存30分钟
         
         self._breadcrumb_cache = {}
         
         # 缓存控制
         self._global_cache_lock = Lock()
         self._cache_locks = {}
-        self._cache_version = 0
-        self._cache_metadata = {}
         
-        # 文件监控
-        self._setup_file_watcher()
-
-        # PDF相关缓存
-        self._pdf_metadata_cache = {}
-        self._pdf_metadata_ttl = 3600  # 1小时
+        # 服务就绪状态
+        self._service_ready = False
+        self._ready_event = asyncio.Event()
+        
+        # 初始化服务（异步）
+        asyncio.create_task(self._initialize_service())
 
     def __del__(self):
         """析构函数，确保在对象被销毁时停止文件监视器"""
@@ -303,13 +298,15 @@ class DocService:
             logging.error(f"执行维护任务时出错: {str(e)}")
             return False
 
-    def _extract_number(self, name: str) -> Tuple:
+    def _extract_number(self, name: str) -> tuple:
         """从文件名或目录名中提取序号，用于排序"""
-        # 移除 .md 后缀
-        name = name.replace('.md', '')
+        # 移除 .md 或 .pdf 后缀
+        base_name = name
+        if base_name.endswith(('.md', '.pdf')):
+            base_name = os.path.splitext(base_name)[0]
         
         # 尝试提取序号
-        parts = name.split('_', 1)
+        parts = base_name.split('_', 1)
         if len(parts) != 2:
             return (float('inf'), name)  # 无序号的排在最后
         
@@ -317,43 +314,39 @@ class DocService:
         # 处理多级序号，如 "1.1"、"1.2"
         try:
             if '.' in number:
-                return tuple(map(int, number.split('.')))
-            return (int(number), 0)
+                # 将 "1.2.3" 转换为 (1, 2, 3) 元组
+                return tuple(map(int, number.split('.'))) + (0,) * 5  # 补充足够的0确保比较一致
+            return (int(number), 0, 0, 0, 0, 0)  # 单级序号，补充0
         except ValueError:
             return (float('inf'), name)
 
     def _sort_items(self, items: List[Dict]) -> List[Dict]:
-        """排序文件或目录列表"""
-        return sorted(items, key=lambda x: self._extract_number(x["name"]))
+        """排序文件或目录列表，使用缓存提高性能"""
+        # 使用缓存避免重复计算排序键
+        sort_keys = {}
+        
+        def get_sort_key(item):
+            name = item["name"]
+            if name not in sort_keys:
+                sort_keys[name] = self._extract_number(name)
+            return sort_keys[name]
+        
+        # 使用缓存的排序键进行排序
+        return sorted(items, key=get_sort_key)
 
     async def get_file_response(self, path: str) -> tuple[str, str]:
-        """获取文件路径和MIME类型，增强的PDF支持"""
+        """获取文件路径和MIME类型，简化版本，不预加载PDF元数据"""
         file_path = os.path.join(self.docs_dir, path)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {path}")
             
         try:
-            # 使用python-magic进行更准确的MIME类型检测，添加超时保护
-            loop = asyncio.get_event_loop()
-            mime_type = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: magic.from_file(file_path, mime=True)),
-                timeout=5.0  # 5秒超时
-            )
-            
-            # 如果是PDF文件，获取元数据
-            if mime_type == 'application/pdf':
-                await self._cache_pdf_metadata(path, file_path)
-                
-            return file_path, mime_type
-        except asyncio.TimeoutError:
-            logging.error(f"获取文件MIME类型超时: {file_path}")
-            # 回退到基于扩展名的MIME类型检测
+            # 使用简单的扩展名检测，避免使用 python-magic
             mime_type, _ = mimetypes.guess_type(file_path)
             return file_path, mime_type or 'application/octet-stream'
         except Exception as e:
             logging.error(f"获取文件MIME类型出错: {str(e)}")
-            mime_type, _ = mimetypes.guess_type(file_path)
-            return file_path, mime_type or 'application/octet-stream'
+            return file_path, 'application/octet-stream'
 
     @lru_cache(maxsize=100)
     def _get_pdf_page_count(self, file_path: str) -> int:
@@ -382,400 +375,299 @@ class DocService:
             return 0
 
     async def _cache_pdf_metadata(self, path: str, file_path: str):
-        """异步缓存PDF元数据，带超时保护"""
-        cache_key = f"pdf_metadata:{path}"
-        current_time = time.time()
-        
-        # 检查缓存
-        if cache_key in self._pdf_metadata_cache:
-            metadata = self._pdf_metadata_cache[cache_key]
-            if current_time - metadata['cache_time'] < self._pdf_metadata_ttl:
-                return metadata['data']
-        
-        # 在线程池中执行PDF处理，带超时
+        """按需获取PDF元数据，不缓存"""
         try:
-            # 使用带超时的方法获取页数
-            page_count = await self._get_pdf_page_count_with_timeout(file_path)
+            # 只获取基本信息，不读取页数
+            file_size = os.path.getsize(file_path)
+            last_modified = os.path.getmtime(file_path)
             
-            # 获取文件大小和修改时间，也添加超时保护
-            loop = asyncio.get_event_loop()
-            file_size = await asyncio.wait_for(
-                loop.run_in_executor(None, os.path.getsize, file_path),
-                timeout=2.0
-            )
-            
-            last_modified = await asyncio.wait_for(
-                loop.run_in_executor(None, os.path.getmtime, file_path),
-                timeout=2.0
-            )
-            
-            metadata = {
-                'page_count': page_count,
+            return {
                 'file_size': file_size,
-                'last_modified': datetime.fromtimestamp(last_modified).isoformat()
+                'last_modified': datetime.fromtimestamp(last_modified).isoformat(),
+                # 不读取页数，避免内存占用
+                'page_count': 0
             }
-            
-            # 更新缓存
-            self._pdf_metadata_cache[cache_key] = {
-                'data': metadata,
-                'cache_time': current_time
-            }
-            
-            return metadata
-            
-        except asyncio.TimeoutError:
-            logging.error(f"缓存PDF元数据超时: {file_path}")
-            # 返回基本元数据
-            try:
-                return {
-                    'page_count': 0,
-                    'file_size': os.path.getsize(file_path),
-                    'last_modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
-                    'error': 'Timeout while processing PDF'
-                }
-            except Exception:
-                return {
-                    'page_count': 0,
-                    'file_size': 0,
-                    'last_modified': datetime.now().isoformat(),
-                    'error': 'Failed to get PDF metadata'
-                }
         except Exception as e:
-            logging.error(f"Error caching PDF metadata: {str(e)}")
-            # 返回基本元数据
-            try:
-                return {
-                    'page_count': 0,
-                    'file_size': os.path.getsize(file_path),
-                    'last_modified': datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
-                    'error': str(e)
-                }
-            except Exception:
-                return {
-                    'page_count': 0,
-                    'file_size': 0,
-                    'last_modified': datetime.now().isoformat(),
-                    'error': 'Failed to get PDF metadata'
-                }
+            logging.error(f"获取PDF元数据出错: {str(e)}")
+            return {
+                'file_size': 0,
+                'last_modified': datetime.now().isoformat(),
+                'page_count': 0,
+                'error': str(e)
+            }
+
+    async def _initialize_service(self):
+        """异步初始化服务，优化版本，不预加载PDF元数据"""
+        try:
+            logging.info("开始初始化服务...")
+            start_time = time.time()
+            
+            # 设置文件监控（同步操作）
+            self._setup_file_watcher()
+            
+            # 预加载文档树
+            await self._preload_doc_tree()
+            
+            # 标记服务为就绪状态
+            self._service_ready = True
+            self._ready_event.set()
+            
+            end_time = time.time()
+            logging.info(f"服务初始化完成，耗时: {end_time - start_time:.2f}秒")
+        except Exception as e:
+            logging.error(f"服务初始化失败: {str(e)}")
+            # 即使初始化失败，也标记为就绪，以便服务可以响应请求
+            self._service_ready = True
+            self._ready_event.set()
+            
+    async def wait_until_ready(self, timeout=None):
+        """等待服务就绪"""
+        try:
+            await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
+            return self._service_ready
+        except asyncio.TimeoutError:
+            logging.warning(f"等待服务就绪超时（{timeout}秒）")
+            return False
 
     async def get_doc_tree(self) -> Dict:
-        """获取文档目录树，增加PDF文件支持，添加超时保护和分批处理"""
-        async with self._cache_lock("tree"):
-            try:
-                # 检查缓存是否有效
-                current_time = time.time()
-                
-                # 使用超时保护获取目录修改时间
-                loop = asyncio.get_event_loop()
-                try:
-                    current_mtime = await asyncio.wait_for(
-                        loop.run_in_executor(None, os.path.getmtime, self.docs_dir),
-                        timeout=3.0
-                    )
-                except (asyncio.TimeoutError, Exception) as e:
-                    logging.error(f"获取目录修改时间失败: {str(e)}")
-                    # 如果获取修改时间失败但缓存存在，使用缓存
-                    if self._doc_tree_cache:
-                        return self._doc_tree_cache
-                    current_mtime = 0  # 强制重建缓存
-                
-                # 如果缓存有效，直接返回
-                if (self._doc_tree_cache and 
-                    current_mtime <= self._doc_tree_last_modified and
-                    self._doc_tree_version == self._cache_version):
-                    return self._doc_tree_cache
-
-                # 构建新的文档树
-                tree = {"name": "root", "children": []}
-                
-                # 使用超时保护获取目录内容
-                try:
-                    # 分批处理目录，避免长时间阻塞
-                    async def process_directory(dir_path, parent_node):
-                        try:
-                            # 获取目录内容
-                            items = await asyncio.wait_for(
-                                loop.run_in_executor(None, lambda: os.listdir(dir_path)),
-                                timeout=5.0
-                            )
-                            
-                            # 分离目录和文件
-                            dirs = []
-                            files = []
-                            
-                            for item in items:
-                                if item.startswith('.'):
-                                    continue
-                                    
-                                item_path = os.path.join(dir_path, item)
-                                try:
-                                    is_dir = await asyncio.wait_for(
-                                        loop.run_in_executor(None, os.path.isdir, item_path),
-                                        timeout=1.0
-                                    )
-                                    
-                                    if is_dir:
-                                        dirs.append(item)
-                                    elif item.endswith('.md') or item.endswith('.pdf'):
-                                        files.append(item)
-                                except (asyncio.TimeoutError, Exception):
-                                    # 跳过处理超时的项
-                                    continue
-                            
-                            # 处理文件
-                            file_nodes = []
-                            rel_dir_path = os.path.relpath(dir_path, self.docs_dir)
-                            rel_dir_path = '.' if rel_dir_path == '.' else rel_dir_path.replace('\\', '/')
-                            
-                            for file in files:
-                                file_path = os.path.join(rel_dir_path, file)
-                                if rel_dir_path == '.':
-                                    file_path = file
-                                
-                                # 确定文件类型
-                                file_type = "markdown" if file.endswith('.md') else "pdf"
-                                
-                                file_nodes.append({
-                                    "name": file,
-                                    "path": file_path.replace('\\', '/'),
-                                    "type": file_type
-                                })
-                            
-                            # 对文件节点排序并添加到当前节点
-                            parent_node["children"].extend(self._sort_items(file_nodes))
-                            
-                            # 处理子目录
-                            for dir_name in dirs:
-                                # 创建目录节点
-                                dir_node = {"name": dir_name, "children": []}
-                                parent_node["children"].append(dir_node)
-                                
-                                # 递归处理子目录
-                                sub_dir_path = os.path.join(dir_path, dir_name)
-                                await process_directory(sub_dir_path, dir_node)
-                            
-                            # 对当前节点的所有子节点排序
-                            parent_node["children"] = self._sort_items(parent_node["children"])
-                            
-                        except (asyncio.TimeoutError, Exception) as e:
-                            logging.error(f"处理目录 {dir_path} 时出错: {str(e)}")
-                    
-                    # 开始处理根目录
-                    await process_directory(self.docs_dir, tree)
-                    
-                except (asyncio.TimeoutError, Exception) as e:
-                    logging.error(f"构建文档树时出错: {str(e)}")
-                    # 如果构建失败但缓存存在，使用缓存
-                    if self._doc_tree_cache:
-                        return self._doc_tree_cache
-                
-                # 更新缓存
-                self._doc_tree_cache = tree
-                self._doc_tree_last_modified = current_mtime
-                self._doc_tree_version = self._cache_version
-                return tree
-                
-            except Exception as e:
-                logging.error(f"获取文档树时出错: {str(e)}")
-                # 如果出错但缓存存在，使用缓存
-                if self._doc_tree_cache:
-                    return self._doc_tree_cache
-                # 否则返回空树
-                return {"name": "root", "children": []}
-
-    async def get_doc_content(self, path: str) -> Dict:
-        """获取文档内容，支持PDF元数据，添加超时保护和错误处理"""
-        file_path = os.path.join(self.docs_dir, path)
-        logging.info(f"尝试访问文件: {file_path}")
-        
-        # 使用超时保护检查文件是否存在
-        try:
-            loop = asyncio.get_event_loop()
-            file_exists = await asyncio.wait_for(
-                loop.run_in_executor(None, os.path.exists, file_path),
-                timeout=3.0
-            )
-            logging.info(f"文件是否存在: {file_exists}")
+        """获取文档目录树，简化高效版本，支持服务就绪检查"""
+        # 如果服务尚未就绪，返回一个简单的树结构
+        if not self._service_ready:
+            logging.warning("服务尚未就绪，返回空文档树")
+            return {"name": "root", "children": [], "status": "loading"}
             
-            if not file_exists:
-                logging.error(f"文件不存在: {file_path}")
-                raise FileNotFoundError(f"Document not found: {path}")
-        except asyncio.TimeoutError:
-            logging.error(f"检查文件存在超时: {file_path}")
-            raise FileNotFoundError(f"Timeout checking if document exists: {path}")
-        except Exception as e:
-            logging.error(f"检查文件存在出错: {str(e)}")
-            raise FileNotFoundError(f"Error checking if document exists: {path}")
+        # 使用简单的缓存策略
+        if self._doc_tree_cache:
+            return self._doc_tree_cache
+            
+        logging.info("构建文档树...")
+        start_time = time.time()
         
-        # 使用锁保护缓存访问
-        async with self._cache_lock(f"content:{path}"):
-            try:
-                # 检测文件类型，使用超时保护
+        # 构建树结构
+        tree = {"name": "root", "children": []}
+        
+        try:
+            # 使用同步方法在线程池中执行，避免阻塞事件循环
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._build_tree_sync, self.docs_dir, tree)
+            
+            # 更新缓存
+            self._doc_tree_cache = tree
+            
+            end_time = time.time()
+            logging.info(f"文档树构建完成，耗时: {end_time - start_time:.2f}秒")
+            
+            return tree
+        except Exception as e:
+            logging.error(f"构建文档树出错: {str(e)}")
+            return {"name": "root", "children": [], "error": str(e)}
+    
+    def _build_tree_sync(self, dir_path, parent_node):
+        """同步构建文档树，内存优化版本"""
+        try:
+            # 一次性获取所有文件和目录
+            all_items = os.listdir(dir_path)
+            
+            # 预先分类，避免重复调用 os.path.isdir
+            dirs = []
+            files = []
+            
+            for item in all_items:
+                if item.startswith('.'):
+                    continue
+                    
+                item_path = os.path.join(dir_path, item)
                 try:
-                    mime_type = await asyncio.wait_for(
-                        loop.run_in_executor(None, lambda: magic.from_file(file_path, mime=True)),
-                        timeout=5.0
-                    )
-                except (asyncio.TimeoutError, Exception) as e:
-                    logging.error(f"获取文件MIME类型出错: {str(e)}")
-                    # 回退到基于扩展名的MIME类型检测
-                    mime_type, _ = mimetypes.guess_type(file_path)
-                    mime_type = mime_type or 'application/octet-stream'
+                    if os.path.isdir(item_path):
+                        dirs.append(item)
+                    elif item.endswith(('.md', '.pdf')):
+                        files.append(item)
+                except Exception:
+                    continue
+            
+            # 处理文件 - 批量处理以减少内存分配
+            if files:
+                file_nodes = []
+                rel_dir_path = os.path.relpath(dir_path, self.docs_dir)
+                rel_dir_path = '.' if rel_dir_path == '.' else rel_dir_path.replace('\\', '/')
                 
-                # 如果是PDF文件，返回元数据
-                if mime_type == 'application/pdf' or path.endswith('.pdf'):
-                    metadata = await self._cache_pdf_metadata(path, file_path)
-                    return {
-                        "path": path,
-                        "type": "pdf",
-                        "metadata": metadata,
-                        "last_modified": metadata['last_modified'] if metadata else None
-                    }
-
-                # 对于Markdown文件，添加超时保护和错误处理
-                if path.endswith('.md'):
-                    # 获取文件修改时间，使用超时保护
-                    try:
-                        current_mtime = await asyncio.wait_for(
-                            loop.run_in_executor(None, os.path.getmtime, file_path),
-                            timeout=3.0
-                        )
-                    except (asyncio.TimeoutError, Exception) as e:
-                        logging.error(f"获取文件修改时间出错: {str(e)}")
-                        current_mtime = time.time()  # 使用当前时间作为回退
+                for file in files:
+                    file_path = os.path.join(rel_dir_path, file)
+                    if rel_dir_path == '.':
+                        file_path = file
                     
-                    cache_key = path
+                    file_type = "markdown" if file.endswith('.md') else "pdf"
                     
-                    # 检查缓存和版本
-                    if cache_key in self._content_cache:
-                        cached_data = self._content_cache[cache_key]
-                        if (current_mtime <= cached_data["mtime"] and 
-                            time.time() - cached_data["cache_time"] < self._content_cache_ttl and
-                            cached_data["version"] == self._cache_version):
-                            self._update_cache_metadata(cache_key, cached_data["content"])
-                            return cached_data["content"]
-
-                    # 读取文件内容，使用超时保护
-                    try:
-                        async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
-                            content = await asyncio.wait_for(f.read(), timeout=10.0)
-                    except UnicodeDecodeError:
-                        # 尝试使用其他编码
-                        try:
-                            async with aiofiles.open(file_path, mode='r', encoding='gbk') as f:
-                                content = await asyncio.wait_for(f.read(), timeout=10.0)
-                        except (asyncio.TimeoutError, Exception) as e:
-                            logging.error(f"读取文件内容出错: {str(e)}")
-                            raise FileNotFoundError(f"Error reading document content: {path}")
-                    except (asyncio.TimeoutError, Exception) as e:
-                        logging.error(f"读取文件内容出错: {str(e)}")
-                        raise FileNotFoundError(f"Error reading document content: {path}")
-
-                    result = {
-                        "path": path,
-                        "type": "markdown",
-                        "content": content,
-                        "last_modified": datetime.fromtimestamp(current_mtime).isoformat()
-                    }
-
-                    # 更新缓存，限制缓存大小
-                    if len(self._content_cache) >= self._content_cache_size:
-                        try:
-                            # 找出最旧的缓存项
-                            oldest_key = min(
-                                self._content_cache.items(),
-                                key=lambda x: x[1]["cache_time"]
-                            )[0]
-                            del self._content_cache[oldest_key]
-                        except Exception as e:
-                            logging.error(f"清理缓存出错: {str(e)}")
-                            # 如果清理失败，简单地清空缓存
-                            if len(self._content_cache) > self._content_cache_size * 1.5:
-                                self._content_cache.clear()
-
-                    self._content_cache[cache_key] = {
-                        "content": result,
-                        "mtime": current_mtime,
-                        "cache_time": time.time(),
-                        "version": self._cache_version
-                    }
-                    
-                    self._update_cache_metadata(cache_key, result)
-                    return result
-
-                # 其他类型文件
-                raise ValueError(f"Unsupported file type: {mime_type}")
+                    file_nodes.append({
+                        "name": file,
+                        "path": file_path.replace('\\', '/'),
+                        "type": file_type
+                    })
                 
-            except FileNotFoundError:
-                raise
+                # 排序并添加文件节点
+                parent_node["children"].extend(self._sort_items(file_nodes))
+                # 释放内存
+                del file_nodes
+            
+            # 处理目录 - 递归处理子目录
+            for dir_name in dirs:
+                dir_node = {"name": dir_name, "children": []}
+                sub_dir_path = os.path.join(dir_path, dir_name)
+                
+                # 递归处理子目录
+                self._build_tree_sync(sub_dir_path, dir_node)
+                
+                # 只有当目录非空时才添加
+                if dir_node["children"]:
+                    parent_node["children"].append(dir_node)
+            
+            # 对目录节点排序
+            if parent_node["children"]:
+                parent_node["children"] = self._sort_items(parent_node["children"])
+            
+        except Exception as e:
+            logging.error(f"处理目录 {dir_path} 时出错: {str(e)}")
+    
+    async def get_doc_content(self, path: str) -> Dict:
+        """获取文档内容，简化版本，减少内存使用"""
+        file_path = os.path.join(self.docs_dir, path)
+        
+        # 简化文件存在检查
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Document not found: {path}")
+        
+        # 使用简单的扩展名检测
+        if path.endswith('.pdf'):
+            # 对于PDF文件，只返回基本信息
+            try:
+                file_size = os.path.getsize(file_path)
+                last_modified = os.path.getmtime(file_path)
+                
+                return {
+                    "path": path,
+                    "type": "pdf",
+                    "metadata": {
+                        'file_size': file_size,
+                        'last_modified': datetime.fromtimestamp(last_modified).isoformat(),
+                        'page_count': 0  # 不读取页数
+                    },
+                    "last_modified": datetime.fromtimestamp(last_modified).isoformat()
+                }
             except Exception as e:
-                logging.error(f"获取文档内容出错: {str(e)}")
-                raise ValueError(f"Error getting document content: {str(e)}")
+                logging.error(f"获取PDF信息出错: {str(e)}")
+                return {
+                    "path": path,
+                    "type": "pdf",
+                    "error": str(e)
+                }
+
+        # 对于Markdown文件
+        if path.endswith('.md'):
+            # 检查缓存
+            cache_key = path
+            if cache_key in self._content_cache:
+                cached_data = self._content_cache[cache_key]
+                if time.time() - cached_data["cache_time"] < self._content_cache_ttl:
+                    return cached_data["content"]
+
+            # 读取文件内容
+            try:
+                async with aiofiles.open(file_path, mode='r', encoding='utf-8') as f:
+                    content = await f.read()
+            except UnicodeDecodeError:
+                # 尝试使用其他编码
+                try:
+                    async with aiofiles.open(file_path, mode='r', encoding='gbk') as f:
+                        content = await f.read()
+                except Exception as e:
+                    logging.error(f"读取文件内容出错: {str(e)}")
+                    raise FileNotFoundError(f"Error reading document content: {path}")
+            except Exception as e:
+                logging.error(f"读取文件内容出错: {str(e)}")
+                raise FileNotFoundError(f"Error reading document content: {path}")
+
+            # 获取修改时间
+            try:
+                last_modified = os.path.getmtime(file_path)
+            except Exception:
+                last_modified = time.time()
+
+            result = {
+                "path": path,
+                "type": "markdown",
+                "content": content,
+                "last_modified": datetime.fromtimestamp(last_modified).isoformat()
+            }
+
+            # 更新缓存，限制缓存大小
+            if len(self._content_cache) >= self._content_cache_size:
+                # 简单地清除最旧的缓存项
+                oldest_key = min(
+                    self._content_cache.keys(),
+                    key=lambda k: self._content_cache[k]["cache_time"]
+                )
+                del self._content_cache[oldest_key]
+
+            self._content_cache[cache_key] = {
+                "content": result,
+                "cache_time": time.time()
+            }
+            
+            return result
+
+        # 其他类型文件
+        raise ValueError(f"Unsupported file type: {path}")
 
     async def get_recent_docs(self, limit: int = 10) -> List[Dict]:
-        """获取最近更新的文档，带缓存，支持 PDF 文件"""
-        async with self._cache_lock("recent_docs"):
-            current_time = time.time()
+        """获取最近更新的文档，简化版本，不读取PDF页数"""
+        # 检查缓存
+        current_time = time.time()
+        if (self._recent_docs_cache and 
+            current_time - self._recent_docs_last_check < self._recent_docs_ttl):
+            return self._recent_docs_cache[:limit]
+
+        docs = []
+        try:
+            # 使用同步文件系统操作
+            for root, _, files in os.walk(self.docs_dir):
+                # 同时处理 .md 和 .pdf 文件
+                doc_files = [f for f in files if f.endswith(('.md', '.pdf'))]
+                for file in doc_files:
+                    try:
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, self.docs_dir)
+                        # 使用同步的 os.stat 获取文件信息
+                        stat = os.stat(file_path)
+                        
+                        doc_info = {
+                            "path": rel_path.replace('\\', '/'),
+                            "name": file,
+                            "last_modified": stat.st_mtime,
+                            "size": stat.st_size,
+                            "type": "pdf" if file.endswith('.pdf') else "markdown"
+                        }
+                        
+                        docs.append(doc_info)
+                    except Exception as e:
+                        logging.error(f"处理文件失败 {file}: {str(e)}")
+                        continue
+
+            # 按最后修改时间排序
+            docs.sort(key=lambda x: x["last_modified"], reverse=True)
             
-            # 检查缓存
-            if (self._recent_docs_cache and 
-                current_time - self._recent_docs_last_check < self._recent_docs_ttl):
-                return self._recent_docs_cache[:limit]
+            # 转换时间格式
+            for doc in docs:
+                doc["last_modified"] = datetime.fromtimestamp(doc["last_modified"]).isoformat()
 
-            docs = []
-            try:
-                # 使用同步文件系统操作，因为 os.walk 是同步的
-                for root, _, files in os.walk(self.docs_dir):
-                    # 同时处理 .md 和 .pdf 文件
-                    doc_files = [f for f in files if f.endswith(('.md', '.pdf'))]
-                    for file in doc_files:
-                        try:
-                            file_path = os.path.join(root, file)
-                            rel_path = os.path.relpath(file_path, self.docs_dir)
-                            # 使用同步的 os.stat 而不是异步版本
-                            stat = os.stat(file_path)
-                            
-                            doc_info = {
-                                "path": rel_path.replace('\\', '/'),
-                                "name": file,
-                                "last_modified": stat.st_mtime,
-                                "size": stat.st_size,
-                                "type": "pdf" if file.endswith('.pdf') else "markdown"
-                            }
-                            
-                            # 如果是 PDF，获取页数
-                            if file.endswith('.pdf'):
-                                try:
-                                    page_count = self._get_pdf_page_count(file_path)
-                                    doc_info["page_count"] = page_count
-                                    # PDF 的阅读时间基于页数估算，假设每页 2 分钟
-                                    doc_info["estimated_reading_time"] = page_count * 2
-                                except Exception as e:
-                                    logging.error(f"获取PDF信息失败 {file_path}: {str(e)}")
-                                    continue
-                            
-                            docs.append(doc_info)
-                        except Exception as e:
-                            logging.error(f"处理文件失败 {file}: {str(e)}")
-                            continue
-
-                # 按最后修改时间排序
-                docs.sort(key=lambda x: x["last_modified"], reverse=True)
-                
-                # 转换时间格式
-                for doc in docs:
-                    doc["last_modified"] = datetime.fromtimestamp(doc["last_modified"]).isoformat()
-
-                # 更新缓存
-                self._recent_docs_cache = docs
-                self._recent_docs_last_check = current_time
-                
-                logging.debug(f"找到 {len(docs)} 个最近文档")
-                return docs[:limit]
-                
-            except Exception as e:
-                logging.error(f"获取最近文档失败: {str(e)}")
-                return []
+            # 更新缓存
+            self._recent_docs_cache = docs
+            self._recent_docs_last_check = current_time
+            
+            return docs[:limit]
+            
+        except Exception as e:
+            logging.error(f"获取最近文档失败: {str(e)}")
+            return []
 
     async def get_breadcrumb(self, path: str) -> List[Dict]:
         """获取文档的面包屑导航，带缓存"""
@@ -798,3 +690,25 @@ class DocService:
             # 缓存结果
             self._breadcrumb_cache[path] = breadcrumb
             return breadcrumb 
+
+    async def _preload_doc_tree(self):
+        """预加载文档树，避免第一次请求时的延迟"""
+        try:
+            logging.info("开始预加载文档树...")
+            start_time = time.time()
+            
+            # 构建树结构
+            tree = {"name": "root", "children": []}
+            
+            # 使用同步方法在线程池中执行
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._build_tree_sync, self.docs_dir, tree)
+            
+            # 更新缓存
+            self._doc_tree_cache = tree
+            
+            end_time = time.time()
+            logging.info(f"文档树预加载完成，耗时: {end_time - start_time:.2f}秒")
+        except Exception as e:
+            logging.error(f"预加载文档树出错: {str(e)}")
+            # 预加载失败不影响系统运行，只是第一次请求会慢一些 
