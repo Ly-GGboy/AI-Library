@@ -8,17 +8,8 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('hypercorn.error')
 
-# 获取证书文件的路径
-cert_dir = os.path.dirname(os.path.abspath(__file__))
-ssl_keyfile = os.path.join(cert_dir, "key.pem")
-ssl_certfile = os.path.join(cert_dir, "cert.pem")
-
 config = Config()
 config.bind = ["0.0.0.0:8000"]
-config.certfile = ssl_certfile
-config.keyfile = ssl_keyfile
-config.verify_mode = None  # 不验证客户端证书
-config.alpn_protocols = ["h2", "http/1.1"]  # 优先使用 HTTP/2
 config.worker_class = "uvloop"  # 使用 uvloop
 config.use_reloader = True  # 启用热重载
 config.accesslog = "-"  # 输出访问日志到 stdout

@@ -1,8 +1,9 @@
 import axios from 'axios'
 
-const api = axios.create({
+// 将api变量导出以便其他模块直接使用
+export const api = axios.create({
   baseURL: '/api',
-  timeout: 10000,
+  timeout: 100000,
   maxRedirects: 5,
   validateStatus: (status) => {
     return status >= 200 && status < 400
@@ -12,7 +13,6 @@ const api = axios.create({
 // Add response interceptor for debugging
 api.interceptors.request.use(
   (config) => {
-    console.log(`API Request [${config.method?.toUpperCase()}] ${config.url}:`, config)
     return config
   },
   (error) => {
@@ -23,14 +23,10 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response [${response.status}] [${response.config.url}]:`, response.data)
     return response
   },
   (error) => {
-    console.error(`API Error [${error.config?.url}]:`, error)
-    if (error.response) {
-      console.error('Error Response:', error.response.data)
-    }
+    console.error('API Response Error:', error)
     return Promise.reject(error)
   }
 )
@@ -46,8 +42,12 @@ export interface DocTree {
 export interface DocContent {
   path: string
   name: string
-  content: string
+  content?: string
   last_modified: string
+  size?: number
+  type?: 'markdown' | 'pdf'
+  page_count?: number
+  estimated_reading_time?: number
 }
 
 export interface SearchResult {
@@ -59,11 +59,32 @@ export interface SearchResult {
     line: number
   }>
   last_modified: string
+  relevance_score: number
 }
 
 export interface Breadcrumb {
   name: string
   path: string
+}
+
+export interface SearchResponse {
+  results: SearchResult[]
+  total: number
+  total_matches: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+export interface SearchParams {
+  q: string
+  page?: number
+  per_page?: number
+  sort_by?: string
+  sort_order?: string
+  doc_type?: string
+  date_from?: string
+  date_to?: string
 }
 
 export const docApi = {
@@ -75,9 +96,7 @@ export const docApi = {
 
   // 获取文档内容
   getDocContent: async (path: string) => {
-    console.log('Fetching doc content for path:', path)
     const response = await api.get<DocContent>(`/docs/content/${path}`)
-    console.log('Raw API response:', response)
     return response.data
   },
 
@@ -96,20 +115,22 @@ export const docApi = {
   }
 }
 
-export const searchApi = {
-  // 搜索文档
-  search: async (query: string, limit: number = 10) => {
-    const response = await api.get<SearchResult[]>('/search', {
-      params: { q: query, limit }
-    })
-    return response.data
-  },
+export const searchDocs = async (params: SearchParams): Promise<SearchResponse> => {
+  const response = await api.get('/search', { params })
+  return response.data
+}
 
-  // 获取搜索建议
-  getSuggestions: async (query: string, limit: number = 5) => {
-    const response = await api.get<string[]>('/search/suggest', {
-      params: { q: query, limit }
-    })
-    return response.data
-  }
+// 管理后台API
+export const adminAPI = {
+  // 获取仪表盘数据
+  getDashboard: () => api.get('/admin/dashboard'),
+  
+  // 获取详细统计数据
+  getStats: () => api.get('/admin/stats'),
+  
+  // 获取热门文档
+  getPopularDocs: (limit = 10) => api.get('/admin/popular-docs', { params: { limit } }),
+  
+  // 获取所有反馈
+  getAllFeedback: (limit = 50) => api.get('/admin/feedback', { params: { limit } })
 } 

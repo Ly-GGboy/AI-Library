@@ -2,12 +2,78 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/ai-logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>文档中心</title>
+    <meta name="description" content="AI Library - 人工智能知识库和文档中心" />
+    <meta name="theme-color" content="#4f46e5" />
+    
+    <!-- 预连接API服务器 -->
+    <link rel="preconnect" href="/api">
+    
+    <!-- 预加载关键CSS -->
+    <link rel="preload" href="/src/assets/main.css" as="style">
+    
+    <!-- 预加载字体 -->
+    <link rel="preload" href="/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+    
+    <!-- PWA相关 -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <title>AI Library - 文档中心</title>
+    
+    <!-- 内联关键CSS -->
+    <style>
+      /* 初始加载状态样式 */
+      .app-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f9fafb;
+        z-index: 9999;
+      }
+      .dark .app-loading {
+        background-color: #111827;
+      }
+      .app-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e7eb;
+        border-top-color: #4f46e5;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      /* 避免FOUC (Flash of Unstyled Content) - 修复选择器 */
+      html:not(.js-loaded) { 
+        visibility: hidden; 
+      }
+      html.js-loaded { 
+        visibility: visible; 
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
+    
+    <script>
+      // 检测暗黑模式
+      if (localStorage.getItem('color-theme') === 'dark' || 
+          (!localStorage.getItem('color-theme') && 
+           window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+      // 标记JS已加载
+      document.documentElement.classList.add('js-loaded');
+    </script>
   </body>
 </html>

@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "node copy-pdf-worker.js && vite",
+    "build": "node copy-pdf-worker.js && vite build",
+    "build:type-check": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -15,9 +16,12 @@
     "@types/lodash-es": "^4.17.12",
     "@vueuse/core": "^12.3.0",
     "axios": "^1.6.2",
+    "gsap": "^3.12.7",
+    "lodash": "^4.17.21",
     "lodash-es": "^4.17.21",
     "marked": "^11.0.0",
-    "pdfjs-dist": "^4.10.38",
+    "pdfium-wasm": "^0.0.2",
+    "pdfjs-dist": "^3.11.174",
     "pinia": "^2.3.0",
     "prismjs": "^1.29.0",
     "vue": "^3.5.13",
@@ -25,14 +29,19 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
+    "@types/gsap": "^1.20.2",
+    "@types/lodash": "^4.17.14",
     "@types/prismjs": "^1.26.5",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
+    "rollup-plugin-visualizer": "^5.14.0",
     "tailwindcss": "^3.4.17",
+    "terser": "^5.39.0",
     "typescript": "~5.6.2",
     "vite": "^6.0.5",
+    "vite-plugin-compression": "^0.5.1",
     "vue-tsc": "^2.2.0"
   }
 }

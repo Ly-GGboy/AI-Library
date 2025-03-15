@@ -1,0 +1,44 @@
+{
+  "total_visits": 805,
+  "unique_visitors": 245,
+  "avg_daily_visits": 115,
+  "period_days": 7,
+  "daily_data": [
+    {
+      "date": "2025-02-20",
+      "total_visits": 165,
+      "unique_visitors": 87
+    },
+    {
+      "date": "2025-02-21",
+      "total_visits": 62,
+      "unique_visitors": 88
+    },
+    {
+      "date": "2025-02-22",
+      "total_visits": 96,
+      "unique_visitors": 48
+    },
+    {
+      "date": "2025-02-23",
+      "total_visits": 106,
+      "unique_visitors": 93
+    },
+    {
+      "date": "2025-02-24",
+      "total_visits": 112,
+      "unique_visitors": 37
+    },
+    {
+      "date": "2025-02-25",
+      "total_visits": 125,
+      "unique_visitors": 70
+    },
+    {
+      "date": "2025-02-26",
+      "total_visits": 139,
+      "unique_visitors": 67
+    }
+  ],
+  "last_updated": "2025-02-26T21:17:35.910446"
+}

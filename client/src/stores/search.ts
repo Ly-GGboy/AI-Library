@@ -1,44 +1,73 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { searchApi, type SearchResult } from '../services/api'
+import { searchDocs } from '../services/api'
+
+interface SearchResult {
+  path: string
+  name: string
+  matches: Array<{
+    type: string
+    text: string
+    line: number
+  }>
+  last_modified: string
+  relevance_score: number
+}
+
+interface SearchMeta {
+  total: number
+  total_matches: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+interface SearchParams {
+  q: string
+  page?: number
+  per_page?: number
+  sort_by?: string
+  sort_order?: string
+  doc_type?: string
+  date_from?: string
+  date_to?: string
+}
 
 export const useSearchStore = defineStore('search', () => {
   const searchResults = ref<SearchResult[]>([])
-  const suggestions = ref<string[]>([])
+  const searchMeta = ref<SearchMeta>({
+    total: 0,
+    total_matches: 0,
+    page: 1,
+    per_page: 10,
+    total_pages: 0
+  })
   const loading = ref(false)
   const error = ref<string | null>(null)
 
-  // 搜索文档
-  async function search(query: string, limit: number = 10) {
+  const search = async (params: SearchParams) => {
+    loading.value = true
+    error.value = null
     try {
-      loading.value = true
-      error.value = null
-      console.log('Searching with query:', query)
-      const results = await searchApi.search(query, limit)
-      console.log('Search results:', results)
-      searchResults.value = results
+      const response = await searchDocs(params)
+      searchResults.value = response.results
+      searchMeta.value = {
+        total: response.total,
+        total_matches: response.total_matches,
+        page: response.page,
+        per_page: response.per_page,
+        total_pages: response.total_pages
+      }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Search failed'
-      console.error('Search failed:', e)
+      error.value = e instanceof Error ? e.message : '搜索失败'
       searchResults.value = []
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // 获取搜索建议
-  async function getSuggestions(query: string, limit: number = 5) {
-    try {
-      loading.value = true
-      error.value = null
-      console.log('Getting suggestions for query:', query)
-      const results = await searchApi.getSuggestions(query, limit)
-      console.log('Suggestions:', results)
-      suggestions.value = results
-    } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Failed to get suggestions'
-      console.error('Failed to get suggestions:', e)
-      suggestions.value = []
+      searchMeta.value = {
+        total: 0,
+        total_matches: 0,
+        page: 1,
+        per_page: 10,
+        total_pages: 0
+      }
     } finally {
       loading.value = false
     }
@@ -46,10 +75,9 @@ export const useSearchStore = defineStore('search', () => {
 
   return {
     searchResults,
-    suggestions,
+    searchMeta,
     loading,
     error,
-    search,
-    getSuggestions
+    search
   }
 }) 

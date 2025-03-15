@@ -1,9 +1,28 @@
 <template>
   <div class="pdf-viewer" ref="pdfViewerRef">
-    <div class="breadcrumb">
-      <!-- 面包屑导航 -->
-    </div>
     <div class="pdf-container" ref="pdfContainer">
+      <div class="pdf-content" :class="{ 'sidebar-visible': sidebarExpanded }">
+        <div v-if="loading" class="loading-overlay">
+          <div class="loading-spinner">
+            <div class="book">
+              <div class="book-page"></div>
+              <div class="book-page"></div>
+              <div class="book-page"></div>
+              <div class="book-cover"></div>
+            </div>
+          </div>
+          <div class="loading-text">正在加载文档...</div>
+        </div>
+        <div v-if="error" class="error-overlay">
+          {{ error }}
+        </div>
+        <div class="pages-container">
+          <div v-for="pageNum in renderedPages" :key="pageNum" class="page-container">
+            <canvas :ref="el => setCanvasRef(el as HTMLCanvasElement, pageNum)" :id="`page-${pageNum}`"></canvas>
+          </div>
+          <div v-if="hasMorePages" class="load-more-trigger" ref="loadMoreTrigger"></div>
+        </div>
+      </div>
       <div class="pdf-sidebar" 
            :class="{ 'collapsed': !sidebarExpanded }"
            @wheel.stop
@@ -43,32 +62,17 @@
           </template>
         </div>
       </div>
-      <div class="pdf-content" :class="{ 'sidebar-visible': sidebarExpanded }">
-        <div v-if="loading" class="loading-overlay">
-          <div class="loading-spinner"></div>
-          <div class="loading-text">加载中...</div>
-        </div>
-        <div v-if="error" class="error-overlay">
-          {{ error }}
-        </div>
-        <div class="pages-container">
-          <div v-for="pageNum in renderedPages" :key="pageNum" class="page-container">
-            <canvas :ref="el => setCanvasRef(el as HTMLCanvasElement, pageNum)" :id="`page-${pageNum}`"></canvas>
-          </div>
-          <!-- 添加一个加载更多的触发器 -->
-          <div v-if="hasMorePages" class="load-more-trigger" ref="loadMoreTrigger"></div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch, onBeforeUnmount, computed } from 'vue'
-import * as pdfjsLib from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/build/pdf'
+import 'pdfjs-dist/build/pdf.worker.min'
 
-// 设置 PDF.js worker 使用本地文件
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf/pdf.worker.min.mjs'
+// 设置 worker 路径
+pdfjsLib.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.js`
 
 const props = defineProps<{
   path: string
@@ -122,10 +126,44 @@ const hasMorePages = computed(() => {
   return lastRenderedPage < totalPages.value;
 });
 
-// 清理函数
-const cleanup = () => {
-  renderLocks.clear();
+// 修改初始化 PDF 函数
+async function initPDF() {
+  loading.value = true;
+  error.value = null;
   
+  try {
+    // 清理之前的状态
+    cleanup();
+    
+    // 加载 PDF 文档
+    pdfDoc = await pdfjsLib.getDocument(`/api/docs/content/${props.path}`).promise;
+    totalPages.value = pdfDoc.numPages;
+    
+    // 加载大纲
+    const outlineData = await pdfDoc.getOutline();
+    if (outlineData && outlineData.length > 0) {
+      const processedOutline = await processOutline(outlineData);
+      outline.value = processedOutline;
+      hasOutline.value = true;
+    } else {
+      outline.value = [];
+      hasOutline.value = false;
+    }
+    
+    // 渲染页面
+    await renderInitialPages();
+    setupIntersectionObserver();
+    
+  } catch (err: any) {
+    console.error('Error loading PDF:', err);
+    error.value = `加载PDF失败: ${err.message}`;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 修改清理函数
+function cleanup() {
   if (pdfDoc) {
     try {
       pdfDoc.destroy();
@@ -135,6 +173,7 @@ const cleanup = () => {
     pdfDoc = null;
   }
   
+  // 清理画布
   pageCanvases.forEach((canvas) => {
     const context = canvas.getContext('2d');
     if (context) {
@@ -142,104 +181,17 @@ const cleanup = () => {
     }
   });
   pageCanvases.clear();
+  renderLocks.clear();
   
+  // 重置所有状态
   totalPages.value = 0;
   currentPage.value = 1;
+  renderedPages.value = [];
+  error.value = null;
   outline.value = [];
   hasOutline.value = false;
-  error.value = null;
+  currentDestination.value = null;
   sidebarExpanded.value = false;
-  renderedPages.value = [];
-}
-
-// 渲染单页
-async function renderPage(pageNum: number) {
-  const canvas = pageCanvases.get(pageNum);
-  if (!canvas) {
-    console.error(`Canvas for page ${pageNum} not found`);
-    return;
-  }
-
-  // 检查是否正在渲染
-  if (renderLocks.get(pageNum)) {
-    console.log(`Page ${pageNum} is already being rendered, skipping...`);
-    return;
-  }
-
-  // 如果页面已经渲染过且内容不为空，则跳过
-  const context = canvas.getContext('2d');
-  if (context) {
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    if (imageData.data.some(pixel => pixel !== 0)) {
-      return; // 页面已经渲染过，跳过
-    }
-  }
-
-  if (!pdfDoc) {
-    error.value = 'PDF 文档未加载';
-    console.error('PDF document not loaded');
-    return;
-  }
-
-  // 设置渲染锁
-  renderLocks.set(pageNum, true);
-
-  try {
-    console.log('Rendering page:', pageNum);
-    const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: scale.value });
-    
-    // 设置 canvas 尺寸
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    
-    // 清除之前的内容
-    context?.clearRect(0, 0, canvas.width, canvas.height);
-
-    // 渲染页面
-    await page.render({
-      canvasContext: context,
-      viewport: viewport
-    }).promise;
-
-    console.log('Page rendered successfully:', pageNum);
-  } catch (err: any) {
-    console.error('Error rendering page:', err);
-    error.value = err instanceof Error ? err.message : '渲染 PDF 页面失败';
-    // 清除 canvas 内容
-    context?.clearRect(0, 0, canvas.width, canvas.height);
-  } finally {
-    // 释放渲染锁
-    renderLocks.set(pageNum, false);
-  }
-}
-
-// 初始化 PDF
-async function initPDF() {
-  console.log('Initializing PDF with path:', props.path)
-  cleanup() // 先清理
-  loading.value = true
-  error.value = null
-  
-  try {
-    console.log('Loading PDF document...')
-    pdfDoc = await pdfjsLib.getDocument(`/api/docs/content/${props.path}`).promise
-    console.log('PDF document loaded successfully')
-    
-    totalPages.value = pdfDoc.numPages
-    await getOutline()
-    
-    // 初始只渲染前几页
-    await renderInitialPages()
-    
-    // 设置 Intersection Observer 来监测加载更多的触发器
-    setupIntersectionObserver()
-  } catch (err: any) {
-    console.error('Error loading PDF:', err)
-    error.value = `加载PDF失败: ${err.message}`
-  } finally {
-    loading.value = false
-  }
 }
 
 // 渲染初始页面
@@ -792,16 +744,17 @@ function handleScroll() {
   }, 100);
 }
 
-// 监听路径变化
-watch(() => props.path, 
-  (newPath, oldPath) => {
-    console.log('PDF path changed:', { newPath, oldPath })
-    if (newPath !== oldPath) {
-      initPDF()
-    }
-  },
-  { immediate: true }
-)
+// 修改监听函数
+watch(() => props.path, async (newPath, oldPath) => {
+  if (newPath === oldPath) return;
+  
+  loading.value = true;  // 确保设置加载状态
+  try {
+    await initPDF();
+  } catch (err) {
+    console.error('Error switching PDF:', err);
+  }
+}, { immediate: true });  // 添加 immediate: true 确保首次加载时也触发
 
 // 展开侧边栏
 function expandSidebar() {
@@ -845,6 +798,58 @@ onBeforeUnmount(() => {
     clearTimeout(scrollTimeout)
   }
 })
+
+// 渲染单页
+async function renderPage(pageNum: number) {
+  const canvas = pageCanvases.get(pageNum);
+  if (!canvas) {
+    console.error(`Canvas for page ${pageNum} not found`);
+    return;
+  }
+
+  // 检查是否正在渲染
+  if (renderLocks.get(pageNum)) {
+    return;
+  }
+
+  // 如果页面已经渲染过且内容不为空，则跳过
+  const context = canvas.getContext('2d');
+  if (context) {
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    if (imageData.data.some(pixel => pixel !== 0)) {
+      return;
+    }
+  }
+
+  // 设置渲染锁
+  renderLocks.set(pageNum, true);
+  
+  try {
+    const page = await pdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: scale.value });
+    
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    const renderContext = {
+      canvasContext: canvas.getContext('2d'),
+      viewport: viewport
+    };
+    
+    await page.render(renderContext).promise;
+  } catch (err) {
+    console.error(`Error rendering page ${pageNum}:`, err);
+  } finally {
+    renderLocks.set(pageNum, false);
+  }
+}
+
+// 添加计算属性获取文件名
+const fileName = computed(() => {
+  const parts = props.path.split('/');
+  const lastPart = parts[parts.length - 1];
+  return lastPart.replace(/\.pdf$/i, '');
+});
 </script>
 
 <style scoped>
@@ -888,7 +893,7 @@ onBeforeUnmount(() => {
 .pdf-container {
   flex: 1;
   width: 100%;
-  height: calc(100vh - 4rem);
+  height: 100vh;  /* 修改为全屏高度 */
   overflow: auto;
   position: relative;
   background: v-bind('isDarkMode ? "rgb(17, 24, 39)" : "rgb(255, 255, 255)"');
@@ -909,16 +914,34 @@ onBeforeUnmount(() => {
   border-radius: 3px;
 }
 
-.breadcrumb {
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 99;
-  background: v-bind('isDarkMode ? "var(--dark-bg-secondary)" : "var(--light-bg-secondary)"');
-  color: v-bind('isDarkMode ? "var(--dark-text-primary)" : "var(--light-text-primary)"');
-  padding: 1rem;
-  box-shadow: v-bind('isDarkMode ? "0 2px 4px var(--dark-shadow)" : "0 2px 4px var(--light-shadow)"');
+.pdf-content {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 2rem;
+  transition: all 0.3s ease;
+  z-index: 1;
+  min-height: clamp(300px, 50vh, 600px);
+}
+
+.page-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  margin: 1rem 0;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.page-container.loading {
+  opacity: 0.6;
+}
+
+.pdf-page {
+  width: 100%;
+  height: auto;
 }
 
 .pdf-sidebar {
@@ -966,35 +989,6 @@ onBeforeUnmount(() => {
 
 .pdf-sidebar.collapsed .toggle-text {
   display: none;
-}
-
-.pdf-content {
-  position: relative;
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  transition: all 0.3s ease;
-  z-index: 1;
-}
-
-.page-container {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  margin: 1rem 0;
-  opacity: 1;
-  transition: opacity 0.3s ease;
-}
-
-.page-container.loading {
-  opacity: 0.6;
-}
-
-.pdf-page {
-  width: 100%;
-  height: auto;
 }
 
 .sidebar-content {
@@ -1067,31 +1061,144 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: v-bind('isDarkMode ? "rgb(17, 24, 39)" : "rgb(255, 255, 255)"');
+  background: v-bind('isDarkMode ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.85)"');
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 98;
+  z-index: 100;
+  animation: fadeIn 0.3s ease-out;
+  padding: 2rem;
 }
 
 .loading-spinner {
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #3498db;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
+  position: relative;
+  width: clamp(80px, 15vw, 160px);  /* 响应式宽度 */
+  height: clamp(60px, 10vw, 120px);  /* 响应式高度 */
+  perspective: 800px;
+  transform-style: preserve-3d;
+  animation: floatBook 3s ease-in-out infinite;
+  margin: 0 auto;
+  margin-top: clamp(2rem, 10vh, 6rem);  /* 响应式上边距 */
 }
 
-.loading-text {
-  margin-top: 1rem;
-  color: v-bind('isDarkMode ? "var(--dark-text-secondary)" : "var(--light-text-secondary)"');
+.book {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(60deg) rotateZ(-10deg);
+  animation: tiltBook 6s ease-in-out infinite;
+  will-change: transform;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.book-page {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  background: v-bind('isDarkMode ? "rgb(96, 165, 250)" : "rgb(37, 99, 235)"');
+  transform-origin: left center;
+  animation: flipPage 2.4s ease-in-out infinite;
+  box-shadow: v-bind('isDarkMode ? "0 0 15px rgba(147, 197, 253, 0.3)" : "0 0 15px rgba(37, 99, 235, 0.2)"');
+  will-change: transform, filter;
+}
+
+.book-page:nth-child(1) {
+  animation-delay: 0s;
+  background: v-bind('isDarkMode ? "rgb(96, 165, 250)" : "rgb(37, 99, 235)"');
+  opacity: 0.95;
+}
+
+.book-page:nth-child(2) {
+  animation-delay: 0.4s;
+  background: v-bind('isDarkMode ? "rgb(147, 197, 253)" : "rgb(59, 130, 246)"');
+  opacity: 0.85;
+}
+
+.book-page:nth-child(3) {
+  animation-delay: 0.8s;
+  background: v-bind('isDarkMode ? "rgb(191, 219, 254)" : "rgb(96, 165, 250)"');
+  opacity: 0.75;
+}
+
+.book-cover {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  background: v-bind('isDarkMode ? "rgb(30, 41, 59)" : "rgb(243, 244, 246)"');
+  transform: translateZ(-8px);
+  box-shadow: v-bind('isDarkMode ? "0 0 30px rgba(0, 0, 0, 0.6)" : "0 0 30px rgba(0, 0, 0, 0.15)"');
+}
+
+.book-cover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, 
+    v-bind('isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.6)"') 0%,
+    v-bind('isDarkMode ? "rgba(255, 255, 255, 0)" : "rgba(255, 255, 255, 0)"') 50%);
+  border-radius: inherit;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes flipPage {
+  0% {
+    transform: rotateY(0deg);
+    filter: brightness(1);
+  }
+  40% {
+    transform: rotateY(-180deg);
+    filter: brightness(1.2);
+  }
+  100% {
+    transform: rotateY(-180deg);
+    filter: brightness(1);
+  }
+}
+
+@keyframes floatBook {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(clamp(-8px, -1.5vw, -15px));
+  }
+}
+
+@keyframes tiltBook {
+  0%, 100% {
+    transform: rotateX(60deg) rotateZ(clamp(-8deg, -1.5vw, -12deg));
+  }
+  50% {
+    transform: rotateX(60deg) rotateZ(clamp(3deg, 0.8vw, 6deg));
+  }
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(100%) skewX(-15deg);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .error-overlay {
@@ -1254,6 +1361,15 @@ canvas {
 
 .sidebar-toggle:hover .toggle-text {
   opacity: 1;
+}
+
+.loading-text {
+  margin-top: 2rem;
+  font-size: 1rem;
+  color: v-bind('isDarkMode ? "var(--dark-text-primary)" : "var(--light-text-primary)"');
+  text-align: center;
+  animation: fadeIn 0.3s ease-out;
+  opacity: 0.8;
 }
 </style>
 
