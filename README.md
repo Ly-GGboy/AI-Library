@@ -1,191 +1,232 @@
 # AI Library
 
-AI Library 是一个由ai开发的现代化的文档管理系统，专注于提供优雅的阅读体验和高效的知识管理。
+[![English](https://img.shields.io/badge/English-Current-blue)](README.md)
+[![中文文档](https://img.shields.io/badge/中文文档-点击查看-orange)](README-zh.md)
 
-## ✨ 功能展示
+AI Library is a modern document management system developed by AI, focusing on providing an elegant reading experience and efficient knowledge management.
 
+## ✨ Features
 
-### 📱 响应式布局
-![响应式布局](responsive.png)
-完美适配桌面端和移动端，提供一致的阅读体验。
+### 📱 Responsive Layout
+![Responsive Layout](responsive.png)
+Perfect adaptation for both desktop and mobile devices, providing a consistent reading experience.
 
-### 🌓 深色模式
-![深色模式](dark-mode.png)
-自动跟随系统切换，保护你的眼睛。支持浅色、深色和护眼模式。
+### 🌓 Dark Mode
+![Dark Mode](dark-mode.png)
+Automatically follows system settings to protect your eyes. Supports light, dark, and eye-protection modes.
 
-###  沉浸护眼模式
-![深色模式](dmode.png)
-进入深度阅读模式，排除一切干扰，自动隐藏设置栏，护眼模式低饱和暖色
+### 🔍 Real-time Search
+![Real-time Search](search.png)
+Quickly locate documents, supporting both title and content search.
 
-### 🔍 实时搜索
-![实时搜索](search.png)
-快速定位文档，支持标题和内容搜索。
+### 📄 High-performance PDF Reading
+Support for chunk loading of large PDF files, enabling fast preview and smooth reading experience.
 
-## 功能特点
+## Feature Details
 
-### 阅读体验
-- 沉浸式阅读模式
-  - 智能隐藏非必要UI元素
-  - 自动调整内容宽度和留白
-  - 支持键盘快捷操作
-  - 阅读进度实时显示
-  - 章节导航保持显示
-  - 支持自动滚动
-- 多主题支持
-  - 浅色主题
-  - 深色主题
-  - 护眼模式
-- 阅读设置
-  - 字体大小调节
-  - 行高调整
-  - 段落间距设置
-  - 页面宽度控制
-- 大屏优化
-  - 支持24-40寸显示器自适应
-  - 智能分栏布局
-  - 图片优化显示
+### Reading Experience
+- Immersive Reading Mode
+  - Intelligently hide non-essential UI elements
+  - Automatically adjust content width and margins
+  - Support for keyboard shortcuts
+  - Real-time display of reading progress
+  - Chapter navigation remains visible
+  - Support for auto-scrolling
+- Multiple Theme Support
+  - Light theme
+  - Dark theme
+  - Eye-protection mode
+- Reading Settings
+  - Font size adjustment
+  - Line height adjustment
+  - Paragraph spacing settings
+  - Page width control
+- Large Screen Optimization
+  - Support for 24-40 inch display adaptation
+  - Smart column layout
+  - Optimized image display
 
-### 文档管理
-- 支持多种文档格式
-  - Markdown 文档
-  - PDF 文件
-- 树形目录结构
-- 文档实时搜索
-- 最近访问记录
-- 阅读位置记忆
-- 阅读时长统计
+### Document Management
+- Support for Multiple Document Formats
+  - Markdown documents
+  - PDF files (with chunk loading support)
+- Tree Directory Structure
+- Real-time Document Search
+- Recent Access Records
+- Reading Position Memory
+- Reading Time Statistics
 
-### 用户体验
-- 响应式设计
-- 多主题支持
-- 优雅的动画过渡
-- 手势操作支持
-- 快捷键支持
+### Advanced PDF Features
+- Chunk Loading Technology
+  - Quick opening of large PDF files
+  - Load page content on demand
+  - Intelligent caching of loaded pages
+- Reading Controls
+  - Page zooming
+  - Page rotation
+  - Precise page navigation
+  - Page thumbnail navigation
+- Performance Optimization
+  - Memory usage optimization
+  - Rendering performance optimization
+  - Cache management
 
-### 特性
-- HTTP/2 支持
-- 高性能后端 API
-- 实时搜索引擎
-- 缓存优化
+### User Experience
+- Responsive Design
+- Multiple Theme Support
+- Elegant Transition Animations
+- Gesture Operation Support
+- Keyboard Shortcut Support
 
-## 技术栈
+### System Features
+- HTTP/2 Support
+- High-performance Backend API
+- Real-time Search Engine
+- Multi-level Cache Optimization
+- Automatic Maintenance Tasks
 
-### 前端
+## Technology Stack
+
+### Frontend
 - Vue 3 (Composition API)
 - TypeScript
 - Tailwind CSS
 - Vite
-- Pinia 状态管理
+- Pinia State Management
 - Vue Router
+- PDF.js (PDF Rendering)
 
-### 后端
+### Backend
 - FastAPI
-- Uvicorn (HTTP/2 支持)
+- Uvicorn (HTTP/2 Support)
 - Python 3.10+
+- PyPDF2 (PDF Processing)
+- SQLite Database
+- Asynchronous IO Processing
 
-### 部署
+### Deployment
 - HTTPS/HTTP2
-- Docker 支持
+- Docker Support
 - Cloudflare Tunnel
 
-## 环境要求
+## Environment Requirements
 
-### 开发环境
+### Development Environment
 - Node.js 16+
 - Python 3.10+
 - pip
 - yarn/npm
 - Git
 
-### 生产环境
+### Production Environment
 - Linux/macOS/Windows
-- Docker (可选)
+- Docker (optional)
 
-## 安装指南
+## Installation Guide
 
-### 1. 克隆项目
+### 1. Clone the Project
 ```bash
 git clone https://github.com/yourusername/ai-library.git
 cd ai-library
 ```
 
-### 2. 后端设置
+### 2. Backend Setup
 ```bash
-# 创建 Python 虚拟环境
+# Create Python virtual environment
 python -m venv py310
 source py310/bin/activate  # Linux/macOS
-# 或
+# or
 .\py310\Scripts\activate  # Windows
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 
-# 生成 SSL 证书（用于开发环境）
+# Generate SSL certificate (for development environment)
 openssl req -x509 -newkey rsa:4096 -keyout server/key.pem -out server/cert.pem -days 365 -nodes
 ```
 
-### 3. 前端设置
+### 3. Frontend Setup
 ```bash
 cd client
-yarn install  # 或 npm install
+yarn install  # or npm install
 
-# 开发环境配置
+# Development environment configuration
 cp .env.example .env.local
 ```
 
-## 开发指南
+## Development Guide
 
-### 启动开发服务器
+### Start Development Server
 
-1. 后端服务器
+1. Backend Server
 ```bash
 cd server
 PYTHONPATH=/path/to/project/server python run.py
 ```
 
-2. 前端服务器
+2. Frontend Server
 ```bash
 cd client
-yarn dev  # 或 npm run dev
+yarn dev  # or npm run dev
 ```
 
-### 开发模式
-- 后端服务器运行在 https://localhost:8000
-- 前端服务器运行在 https://localhost:5173
-- API 文档访问地址：https://localhost:8000/docs
+### Development Mode
+- Backend server runs at https://localhost:8000
+- Frontend server runs at https://localhost:5173
+- API documentation available at: https://localhost:8000/docs
 
-## 项目结构
+## API Interfaces
+
+### Document Interfaces
+- `GET /api/docs/tree` - Get document directory tree
+- `GET /api/docs/content/{path}` - Get document content
+- `GET /api/docs/metadata/{path}` - Get document metadata
+- `GET /api/docs/recent` - Get recently accessed documents
+- `GET /api/docs/breadcrumb/{path}` - Get document breadcrumb navigation
+
+### PDF Interfaces
+- `GET /api/pdf/metadata/{path}` - Get PDF metadata and chunk information
+- `GET /api/pdf/chunk/{path}?start={start}&end={end}` - Get specific page range of PDF
+
+### Search Interfaces
+- `GET /api/search?q={query}` - Search documents
+- `POST /api/search/rebuild-index` - Rebuild search index
+
+## Project Structure
 ```
 .
-├── client/                 # 前端代码
+├── client/                 # Frontend code
 │   ├── src/
-│   │   ├── components/    # Vue 组件
-│   │   ├── stores/        # Pinia 状态管理
-│   │   ├── services/      # API 服务
-│   │   └── styles/        # 全局样式
-│   └── public/            # 静态资源
-├── server/                # 后端代码
-│   ├── app/              # FastAPI 应用
-│   │   ├── api/          # API 路由
-│   │   ├── models/       # 数据模型
-│   │   └── services/     # 业务逻辑
-│   └── tests/            # 测试用例
-└── docs/                 # 文档目录
+│   │   ├── components/    # Vue components
+│   │   ├── stores/        # Pinia state management
+│   │   ├── services/      # API services
+│   │   └── styles/        # Global styles
+│   └── public/            # Static resources
+├── server/                # Backend code
+│   ├── app/              # FastAPI application
+│   │   ├── routers/      # API routes
+│   │   ├── services/     # Business logic
+│   │   └── models/       # Data models
+│   ├── static/           # Static files
+│   │   └── docs/         # Document storage
+│   │       └── __pdf_chunks__/ # PDF chunk cache
+│   └── tests/            # Test cases
+└── docs/                 # Documentation directory
 ```
 
-## 贡献指南
+## Contribution Guide
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交 Pull Request
+1. Fork the project
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Submit a Pull Request
 
-## 许可证
+## License
 
 [MIT License](LICENSE)
 
-## 联系方式
+## Contact
 
-- 项目维护者：[LY-GGBOY](li1980303503@gmail.com)
-- 项目主页：[GitHub](https://github.com/Ly-GGboy/ai-library)
+- Project Maintainer: [LY-GGBOY](li1980303503@gmail.com)
+- Project Homepage: [GitHub](https://github.com/Ly-GGboy/ai-library)
