@@ -19,9 +19,6 @@ Automatically follows system settings to protect your eyes. Supports light, dark
 ![Real-time Search](search.png)
 Quickly locate documents, supporting both title and content search.
 
-### 📄 High-performance PDF Reading
-Support for chunk loading of large PDF files, enabling fast preview and smooth reading experience.
-
 ## Feature Details
 
 ### Reading Experience
@@ -49,27 +46,12 @@ Support for chunk loading of large PDF files, enabling fast preview and smooth r
 ### Document Management
 - Support for Multiple Document Formats
   - Markdown documents
-  - PDF files (with chunk loading support)
+  - PDF files
 - Tree Directory Structure
 - Real-time Document Search
 - Recent Access Records
 - Reading Position Memory
 - Reading Time Statistics
-
-### Advanced PDF Features
-- Chunk Loading Technology
-  - Quick opening of large PDF files
-  - Load page content on demand
-  - Intelligent caching of loaded pages
-- Reading Controls
-  - Page zooming
-  - Page rotation
-  - Precise page navigation
-  - Page thumbnail navigation
-- Performance Optimization
-  - Memory usage optimization
-  - Rendering performance optimization
-  - Cache management
 
 ### User Experience
 - Responsive Design
@@ -94,13 +76,11 @@ Support for chunk loading of large PDF files, enabling fast preview and smooth r
 - Vite
 - Pinia State Management
 - Vue Router
-- PDF.js (PDF Rendering)
 
 ### Backend
 - FastAPI
 - Uvicorn (HTTP/2 Support)
 - Python 3.10+
-- PyPDF2 (PDF Processing)
 - SQLite Database
 - Asynchronous IO Processing
 
@@ -184,10 +164,6 @@ yarn dev  # or npm run dev
 - `GET /api/docs/recent` - Get recently accessed documents
 - `GET /api/docs/breadcrumb/{path}` - Get document breadcrumb navigation
 
-### PDF Interfaces
-- `GET /api/pdf/metadata/{path}` - Get PDF metadata and chunk information
-- `GET /api/pdf/chunk/{path}?start={start}&end={end}` - Get specific page range of PDF
-
 ### Search Interfaces
 - `GET /api/search?q={query}` - Search documents
 - `POST /api/search/rebuild-index` - Rebuild search index
@@ -208,8 +184,6 @@ yarn dev  # or npm run dev
 │   │   ├── services/     # Business logic
 │   │   └── models/       # Data models
 │   ├── static/           # Static files
-│   │   └── docs/         # Document storage
-│   │       └── __pdf_chunks__/ # PDF chunk cache
 │   └── tests/            # Test cases
 └── docs/                 # Documentation directory
 ```

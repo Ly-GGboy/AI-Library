@@ -157,6 +157,19 @@ yarn dev  # 或 npm run dev
 - 前端服务器运行在 https://localhost:5173
 - API 文档访问地址：https://localhost:8000/docs
 
+## API接口
+
+### 文档接口
+- `GET /api/docs/tree` - 获取文档目录树
+- `GET /api/docs/content/{path}` - 获取文档内容
+- `GET /api/docs/metadata/{path}` - 获取文档元数据
+- `GET /api/docs/recent` - 获取最近访问的文档
+- `GET /api/docs/breadcrumb/{path}` - 获取文档面包屑导航
+
+### 搜索接口
+- `GET /api/search?q={query}` - 搜索文档
+- `POST /api/search/rebuild-index` - 重建搜索索引
+
 ## 项目结构
 ```
 .
@@ -169,9 +182,11 @@ yarn dev  # 或 npm run dev
 │   └── public/            # 静态资源
 ├── server/                # 后端代码
 │   ├── app/              # FastAPI 应用
-│   │   ├── api/          # API 路由
-│   │   ├── models/       # 数据模型
-│   │   └── services/     # 业务逻辑
+│   │   ├── routers/      # API 路由
+│   │   ├── services/     # 业务逻辑
+│   │   └── models/       # 数据模型
+│   ├── static/           # 静态文件
+│   │   └── docs/         # 文档存储
 │   └── tests/            # 测试用例
 └── docs/                 # 文档目录
 ```
