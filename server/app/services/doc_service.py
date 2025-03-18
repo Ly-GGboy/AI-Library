@@ -430,7 +430,7 @@ class DocService:
             return False
 
     async def get_doc_tree(self) -> Dict:
-        """获取文档目录树，简化高效版本，支持服务就绪检查"""
+        """获取文档目录树，优化版本，默认只加载顶层目录"""
         # 如果服务尚未就绪，返回一个简单的树结构
         if not self._service_ready:
             logging.warning("服务尚未就绪，返回空文档树")
@@ -443,13 +443,14 @@ class DocService:
         logging.info("构建文档树...")
         start_time = time.time()
         
-        # 构建树结构
+        # 构建树结构，只加载顶层
         tree = {"name": "root", "children": []}
         
         try:
             # 使用同步方法在线程池中执行，避免阻塞事件循环
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._build_tree_sync, self.docs_dir, tree)
+            # 只加载顶层目录，深度为1
+            await loop.run_in_executor(None, self._build_tree_sync_with_depth, self.docs_dir, tree, 1)
             
             # 更新缓存
             self._doc_tree_cache = tree
@@ -461,9 +462,33 @@ class DocService:
         except Exception as e:
             logging.error(f"构建文档树出错: {str(e)}")
             return {"name": "root", "children": [], "error": str(e)}
-    
-    def _build_tree_sync(self, dir_path, parent_node):
-        """同步构建文档树，内存优化版本"""
+
+    async def get_doc_subtree(self, path: str) -> Dict:
+        """获取指定路径的子树，用于按需加载"""
+        try:
+            # 获取绝对路径
+            dir_path = os.path.join(self.docs_dir, path)
+            
+            # 检查路径是否存在且是目录
+            if not os.path.exists(dir_path) or not os.path.isdir(dir_path):
+                logging.error(f"路径不存在或不是目录: {dir_path}")
+                return {"error": "路径不存在或不是目录"}
+            
+            # 构建子树
+            subtree = {"name": os.path.basename(path), "path": path, "children": []}
+            
+            # 使用线程池执行IO密集操作，构建完整子树（深度设置足够大）
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._build_tree_sync, dir_path, subtree)
+            
+            logging.info(f"子树构建完成，路径: {path}, 子节点数量: {len(subtree.get('children', []))}")
+            return subtree
+        except Exception as e:
+            logging.error(f"获取子树失败: {str(e)}")
+            return {"error": str(e)}
+
+    def _build_tree_sync_with_depth(self, dir_path, parent_node, max_depth, current_depth=0):
+        """同步构建有限深度的文档树"""
         try:
             # 一次性获取所有文件和目录
             all_items = os.listdir(dir_path)
@@ -485,8 +510,8 @@ class DocService:
                 except Exception:
                     continue
             
-            # 处理文件 - 批量处理以减少内存分配
-            if files:
+            # 处理文件
+            if files and current_depth < max_depth:
                 file_nodes = []
                 rel_dir_path = os.path.relpath(dir_path, self.docs_dir)
                 rel_dir_path = '.' if rel_dir_path == '.' else rel_dir_path.replace('\\', '/')
@@ -501,7 +526,8 @@ class DocService:
                     file_nodes.append({
                         "name": file,
                         "path": file_path.replace('\\', '/'),
-                        "type": file_type
+                        "type": file_type,
+                        "is_file": True
                     })
                 
                 # 排序并添加文件节点
@@ -509,16 +535,25 @@ class DocService:
                 # 释放内存
                 del file_nodes
             
-            # 处理目录 - 递归处理子目录
+            # 处理目录
             for dir_name in dirs:
                 dir_node = {"name": dir_name, "children": []}
                 sub_dir_path = os.path.join(dir_path, dir_name)
                 
-                # 递归处理子目录
-                self._build_tree_sync(sub_dir_path, dir_node)
+                # 计算相对路径
+                rel_path = os.path.relpath(sub_dir_path, self.docs_dir).replace('\\', '/')
+                dir_node["path"] = rel_path
+                dir_node["is_dir"] = True
                 
-                # 只有当目录非空时才添加
-                if dir_node["children"]:
+                # 只有深度未达到最大值时才递归处理子目录
+                if current_depth < max_depth:
+                    self._build_tree_sync_with_depth(sub_dir_path, dir_node, max_depth, current_depth + 1)
+                else:
+                    # 如果达到最大深度，添加标记表示有子内容但未加载
+                    dir_node["has_children"] = True
+                
+                # 只有当目录非空或者有待加载子内容时才添加
+                if dir_node["children"] or dir_node.get("has_children", False):
                     parent_node["children"].append(dir_node)
             
             # 对目录节点排序
@@ -528,6 +563,16 @@ class DocService:
         except Exception as e:
             logging.error(f"处理目录 {dir_path} 时出错: {str(e)}")
     
+    def _build_tree_sync(self, dir_path, parent_node):
+        """同步构建文档树，使用最大深度为无限的方式构建完整树"""
+        try:
+            # 调用带深度参数的方法，设置足够大的深度以构建完整树
+            return self._build_tree_sync_with_depth(dir_path, parent_node, max_depth=999, current_depth=0)
+        except Exception as e:
+            logging.error(f"构建树失败: {str(e)}")
+            # 确保失败时不会完全崩溃
+            return None
+
     async def get_doc_content(self, path: str) -> Dict:
         """获取文档内容，简化版本，减少内存使用"""
         file_path = os.path.join(self.docs_dir, path)

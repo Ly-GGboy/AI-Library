@@ -37,6 +37,9 @@ export interface DocTree {
   path?: string
   type?: string
   parent?: DocTree
+  has_children?: boolean
+  is_dir?: boolean
+  is_file?: boolean
 }
 
 export interface DocContent {
@@ -91,6 +94,12 @@ export const docApi = {
   // 获取文档树
   getDocTree: async () => {
     const response = await api.get<DocTree>('/docs/tree')
+    return response.data
+  },
+
+  // 获取子树
+  getDocSubtree: async (path: string) => {
+    const response = await api.get<DocTree>(`/docs/subtree/${path}`)
     return response.data
   },
 

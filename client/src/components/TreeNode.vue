@@ -7,7 +7,7 @@
     </template>
     <template v-else>
       <div
-        v-if="node.children && node.children.length > 0"
+        v-if="isDir"
         class="node-content folder group"
         @click="toggleExpand"
       >
@@ -35,7 +35,7 @@
           <button 
             v-if="needsExpansion"
             class="expand-button"
-            @click="toggleNameExpand"
+            @click.stop="toggleNameExpand"
             :title="isNameExpanded ? '收起' : '展开'"
           >
             <component
@@ -118,7 +118,17 @@
       </div>
 
       <div v-if="expanded && node.children" :class="['node-children', getIndentClass]">
+        <div v-if="isLoading" class="node-loading flex items-center justify-center py-2">
+          <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500 mr-2"></div>
+          <span class="text-xs text-gray-500">加载中...</span>
+        </div>
+        
+        <div v-else-if="expanded && (!node.children || node.children.length === 0)" class="empty-folder text-xs text-gray-500 pl-6 py-2">
+          此文件夹为空
+        </div>
+        
         <TreeNode
+          v-else
           v-for="child in node.children"
           :key="child.path || child.name"
           :node="{ ...child, parent: node }"
@@ -134,6 +144,8 @@
 import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import type { PropType } from 'vue'
 import { useRoute } from 'vue-router'
+import { useDocStore } from '../stores/doc'
+import { storeToRefs } from 'pinia'
 import {
   ChevronRightIcon,
   ChevronDownIcon,
@@ -152,6 +164,9 @@ interface TreeNodeType {
   children?: TreeNodeType[]
   items?: TreeNodeType[]
   parent?: TreeNodeType
+  is_dir?: boolean
+  is_file?: boolean
+  has_children?: boolean
 }
 
 const props = defineProps({
@@ -238,10 +253,31 @@ watch(() => props.filter, (newFilter) => {
   }
 })
 
-const toggleExpand = () => {
+// 判断是否是目录节点
+const isDir = computed(() => {
+  return props.node.is_dir || (props.node.children && props.node.children.length > 0) || props.node.has_children
+})
+
+// 使用store
+const docStore = useDocStore()
+const { subTreeLoading } = storeToRefs(docStore)
+
+// 计算当前节点是否正在加载
+const isLoading = computed(() => {
+  return props.node.path ? subTreeLoading.value[props.node.path] : false
+})
+
+// 修改切换展开方法，支持按需加载
+const toggleExpand = async () => {
   expanded.value = !expanded.value
+  
   // 保存展开状态到 localStorage
   localStorage.setItem(storageKey, expanded.value.toString())
+  
+  // 如果展开目录，并且该目录有未加载的子内容，则加载子树
+  if (expanded.value && props.node.path && props.node.has_children) {
+    await docStore.loadDocSubtree(props.node.path)
+  }
 }
 
 // 清除所有展开状态

@@ -24,6 +24,21 @@ async def get_doc_tree() -> Dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/subtree/{path:path}")
+async def get_doc_subtree(path: str) -> Dict:
+    """获取指定路径的子树"""
+    try:
+        logger.info(f"正在获取子树: {path}")
+        result = await get_doc_service().get_doc_subtree(path)
+        if "error" in result:
+            logger.error(f"获取子树失败: {path}, 错误: {result['error']}")
+            raise HTTPException(status_code=400, detail=result["error"])
+        logger.info(f"子树获取成功: {path}, 子节点数量: {len(result.get('children', []))}")
+        return result
+    except Exception as e:
+        logger.error(f"获取子树失败: {path}, 错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/content/{path:path}")
 async def get_doc_content(path: str):
     """获取文档内容或文件"""
