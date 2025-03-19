@@ -183,7 +183,13 @@ onMounted(() => {
 }
 
 :deep(.markdown-body code) {
-  @apply font-mono text-sm dark:text-gray-300;
+  @apply font-mono text-sm text-gray-800 bg-gray-100 dark:text-gray-300 dark:bg-gray-800;
+}
+
+:deep(.markdown-body pre code) {
+  @apply text-white bg-transparent;
+  color: #fff !important;
+  background-color: transparent !important;
 }
 
 :deep(.markdown-body img) {
