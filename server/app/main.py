@@ -154,13 +154,33 @@ async def startup_event():
     # 启动定期维护任务
     asyncio.create_task(perform_maintenance())
     
-    # 检查搜索索引是否为空，如果为空则构建
-    search_service = SearchService()
-    if len(search_service.file_index) == 0:
-        print("[INFO] 搜索索引为空，正在自动构建索引...")
-        await search_service.build_index()
-        print("[INFO] 搜索索引构建完成")
-    else:
-        print(f"[INFO] 搜索索引已加载，包含 {len(search_service.file_index)} 个文件")
+    # 在后台任务中检查和构建搜索索引，避免阻塞主线程
+    asyncio.create_task(check_and_build_search_index())
     
     print("Application started with maintenance tasks.")
+
+async def check_and_build_search_index():
+    """异步检查并构建搜索索引的后台任务"""
+    try:
+        search_service = SearchService()
+        if len(search_service.file_index) == 0:
+            print("[INFO] 搜索索引为空，即将在后台构建索引...")
+            # 设置较长的超时时间，处理大文件集合
+            try:
+                # 使用较长的超时防止大型索引构建被中断
+                await asyncio.wait_for(search_service.build_index(), timeout=3600)  # 1小时超时
+                print("[INFO] 搜索索引构建完成")
+            except asyncio.TimeoutError:
+                print("[ERROR] 搜索索引构建超时，请手动重建索引或检查文件量")
+            except Exception as e:
+                import traceback
+                print(f"[ERROR] 搜索索引构建失败: {str(e)}")
+                traceback.print_exc()
+                print("[INFO] 系统将继续运行，但搜索功能可能不可用，请手动重建索引")
+        else:
+            print(f"[INFO] 搜索索引已加载，包含 {len(search_service.file_index)} 个文件")
+    except Exception as e:
+        print(f"[ERROR] 检查搜索索引时出错: {str(e)}")
+        # 记录详细错误信息，但允许应用继续启动
+        import traceback
+        traceback.print_exc()

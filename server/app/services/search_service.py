@@ -6,6 +6,8 @@ import aiofiles
 from math import ceil
 import json
 from pathlib import Path
+import time
+import asyncio
 
 class SearchService:
     def __init__(self):
@@ -316,72 +318,109 @@ class SearchService:
         file_count = 0
         md_count = 0
         pdf_count = 0
+        error_count = 0
         
-        # 遍历文档目录
+        # 先收集所有文件路径
+        all_files = []
         for root, _, files in os.walk(self.docs_dir):
             for file in files:
                 if file.startswith('.'):  # 跳过隐藏文件
                     continue
-                    
                 file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(file_path, self.docs_dir).replace('\\', '/')
-                
-                # 获取文件类型
-                file_ext = os.path.splitext(file)[1][1:].lower()
-                
+                all_files.append(file_path)
+        
+        total_files = len(all_files)
+        print(f"[INFO] 发现 {total_files} 个文件需要索引")
+        
+        # 分批处理文件，每批100个
+        batch_size = 100
+        batches = [all_files[i:i + batch_size] for i in range(0, len(all_files), batch_size)]
+        
+        # 每批处理
+        for batch_index, batch_files in enumerate(batches):
+            batch_start_time = time.time()
+            batch_count = 0
+            
+            for file_path in batch_files:
                 try:
+                    rel_path = os.path.relpath(file_path, self.docs_dir).replace('\\', '/')
+                    file_ext = os.path.splitext(file_path)[1][1:].lower()
+                    
                     # 处理 Markdown 文件
                     if file_ext == 'md':
-                        try:
-                            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
-                                content = await f.read()
-                        except UnicodeDecodeError:
-                            # 尝试其他编码
-                            async with aiofiles.open(file_path, 'r', encoding='gbk') as f:
-                                content = await f.read()
-                            
-                        # 提取关键信息 - 改进中文处理
-                        # 使用更宽松的正则表达式，包括中文字符
-                        words = set(re.findall(r'[\w\u4e00-\u9fff]+', content.lower()))
-                        headers = re.findall(r'^#+\s+(.+)$', content, re.MULTILINE)
-                        
-                        self.file_index[rel_path] = {
-                            'words': list(words),
-                            'headers': headers,
-                            'last_modified': os.path.getmtime(file_path),
-                            'type': file_ext,
-                            'size': os.path.getsize(file_path)
-                        }
+                        await self._index_markdown_file(file_path, rel_path)
                         md_count += 1
-                        print(f"[DEBUG] 已索引 Markdown 文件: {rel_path}, 词数: {len(words)}, 标题数: {len(headers)}")
+                        batch_count += 1
                     
                     # 处理 PDF 文件
                     elif file_ext == 'pdf':
-                        # 对 PDF 文件，只索引文件名
-                        file_name = os.path.basename(file_path)
-                        # 改进中文处理
-                        words = set(re.findall(r'[\w\u4e00-\u9fff]+', file_name.lower()))
-                        
-                        self.file_index[rel_path] = {
-                            'words': list(words),
-                            'headers': [],
-                            'last_modified': os.path.getmtime(file_path),
-                            'type': file_ext,
-                            'size': os.path.getsize(file_path)
-                        }
+                        await self._index_pdf_file(file_path, rel_path)
                         pdf_count += 1
-                        print(f"[DEBUG] 已索引 PDF 文件: {rel_path}, 文件名词数: {len(words)}")
+                        batch_count += 1
                     else:
-                        print(f"[DEBUG] 跳过不支持的文件类型: {rel_path}, 类型: {file_ext}")
                         continue
                     
                     file_count += 1
                 except Exception as e:
+                    error_count += 1
                     print(f"[ERROR] 索引文件 {file_path} 时出错: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    if error_count % 10 == 0:  # 每10个错误输出一次堆栈
+                        import traceback
+                        traceback.print_exc()
+            
+            # 批次完成后保存进度
+            if batch_count > 0:
+                await self._save_index()
+                
+            batch_time = time.time() - batch_start_time
+            completed = min((batch_index + 1) * batch_size, total_files)
+            progress = (completed / total_files) * 100
+            
+            print(f"[INFO] 已处理 {completed}/{total_files} 个文件 ({progress:.1f}%), 批次耗时: {batch_time:.2f}秒, "
+                  f"当前索引文件数: {len(self.file_index)}, 错误数: {error_count}")
+            
+            # 短暂休眠，避免CPU过载
+            await asyncio.sleep(0.1)
         
-        # 保存索引
+        # 最终保存索引
         await self._save_index()
-        print(f"[DEBUG] 搜索索引构建完成，总文件数: {file_count}, Markdown: {md_count}, PDF: {pdf_count}")
-        print(f"[DEBUG] 索引文件保存至: {self.index_path}") 
+        print(f"[INFO] 搜索索引构建完成，总文件数: {file_count}, Markdown: {md_count}, PDF: {pdf_count}, 错误: {error_count}")
+        print(f"[INFO] 索引文件保存至: {self.index_path}")
+        return {"indexed_files": file_count, "errors": error_count}
+    
+    async def _index_markdown_file(self, file_path, rel_path):
+        """索引Markdown文件"""
+        try:
+            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                content = await f.read()
+        except UnicodeDecodeError:
+            # 尝试其他编码
+            async with aiofiles.open(file_path, 'r', encoding='gbk') as f:
+                content = await f.read()
+        
+        # 提取关键信息 - 改进中文处理
+        words = set(re.findall(r'[\w\u4e00-\u9fff]+', content.lower()))
+        headers = re.findall(r'^#+\s+(.+)$', content, re.MULTILINE)
+        
+        self.file_index[rel_path] = {
+            'words': list(words),
+            'headers': headers,
+            'last_modified': os.path.getmtime(file_path),
+            'type': 'md',
+            'size': os.path.getsize(file_path)
+        }
+    
+    async def _index_pdf_file(self, file_path, rel_path):
+        """索引PDF文件"""
+        # 对 PDF 文件，只索引文件名
+        file_name = os.path.basename(file_path)
+        # 改进中文处理
+        words = set(re.findall(r'[\w\u4e00-\u9fff]+', file_name.lower()))
+        
+        self.file_index[rel_path] = {
+            'words': list(words),
+            'headers': [],
+            'last_modified': os.path.getmtime(file_path),
+            'type': 'pdf',
+            'size': os.path.getsize(file_path)
+        } 
