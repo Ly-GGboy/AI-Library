@@ -1,0 +1,147 @@
+INFO:hypercorn.error:服务器将使用HTTPS启动，监听端口 0.0.0.0:8000
+DEBUG:asyncio:Using selector: KqueueSelector
+DEBUG:root:初始化 DocService, 文档目录路径: /Users/mod/PycharmProjects/AI-Library/server/static/docs
+DEBUG:root:软链接指向: /Users/mod/PycharmProjects/downloaded_content
+DEBUG:root:目录存在: /Users/mod/PycharmProjects/AI-Library/server/static/docs
+INFO:root:执行定期维护任务...
+WARNING:root:文件监视器不活跃，尝试重启
+DEBUG:root:文件监视器已启动，监视目录: /Users/mod/PycharmProjects/AI-Library/server/static/docs
+ERROR:root:清理过期读者记录时出错: 'DocService' object has no attribute '_online_readers'
+DEBUG:root:维护任务完成
+INFO:root:维护任务完成
+INFO:root:开始初始化服务（不预加载文档树）...
+DEBUG:root:文件监视器已停止
+DEBUG:root:文件监视器已启动，监视目录: /Users/mod/PycharmProjects/AI-Library/server/static/docs
+INFO:root:服务初始化完成，耗时: 0.00秒
+INFO:root:文档服务将使用分层加载模式，不使用文档树缓存
+ERROR:hypercorn.error:Unexpected error occurred
+Traceback (most recent call last):
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/__init__.py", line 44, in serve
+    await worker_serve(
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/run.py", line 80, in worker_serve
+    sockets = config.create_sockets()
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 197, in create_sockets
+    secure_sockets = self._create_sockets(self.bind)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 266, in _create_sockets
+    sock.bind(binding)
+OSError: [Errno 48] Address already in use
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/routing.py", line 686, in lifespan
+    await receive()
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/lifespan.py", line 92, in asgi_receive
+    return await self.app_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mod/PycharmProjects/AI-Library/server/run_h2.py", line 39, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/server/run_h2.py", line 55, in wrapped_app
+    return await app(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/fastapi/applications.py", line 1106, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/applications.py", line 122, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/middleware/errors.py", line 149, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/middleware/base.py", line 26, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/middleware/gzip.py", line 26, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/middleware/cors.py", line 75, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/middleware/exceptions.py", line 55, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 20, in __call__
+    raise e
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/fastapi/middleware/asyncexitstack.py", line 17, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/routing.py", line 707, in __call__
+    await self.lifespan(scope, receive, send)
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/routing.py", line 690, in lifespan
+    await send({"type": "lifespan.shutdown.failed", "message": exc_text})
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/lifespan.py", line 104, in asgi_send
+    raise LifespanFailureError("shutdown", message.get("message", ""))
+hypercorn.utils.LifespanFailureError: Lifespan failure in shutdown. 'Traceback (most recent call last):
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/__init__.py", line 44, in serve
+    await worker_serve(
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/run.py", line 80, in worker_serve
+    sockets = config.create_sockets()
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 197, in create_sockets
+    secure_sockets = self._create_sockets(self.bind)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 266, in _create_sockets
+    sock.bind(binding)
+OSError: [Errno 48] Address already in use
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/starlette/routing.py", line 686, in lifespan
+    await receive()
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/lifespan.py", line 92, in asgi_receive
+    return await self.app_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+'
+[DEBUG] 加载搜索索引: /Users/mod/PycharmProjects/AI-Library/server/static/cache/search_index.json
+[DEBUG] 索引加载成功，包含 13 个文件
+[DEBUG] 索引文件类型统计: {'pdf': 11, 'md': 2}
+[INFO] 搜索服务初始化完成，索引文件数: 13, 是否为空: False
+Application started with maintenance tasks. If search index is empty, please use the /api/search/rebuild-index endpoint to build it.
+Traceback (most recent call last):
+  File "/Users/mod/PycharmProjects/AI-Library/server/run_h2.py", line 57, in <module>
+    asyncio.run(serve(wrapped_app, config)) 
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/.pyenv/versions/3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/__init__.py", line 44, in serve
+    await worker_serve(
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/asyncio/run.py", line 80, in worker_serve
+    sockets = config.create_sockets()
+              ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 197, in create_sockets
+    secure_sockets = self._create_sockets(self.bind)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mod/PycharmProjects/AI-Library/venv/lib/python3.11/site-packages/hypercorn/config.py", line 266, in _create_sockets
+    sock.bind(binding)
+OSError: [Errno 48] Address already in use

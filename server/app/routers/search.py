@@ -1,9 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Optional
 from datetime import datetime
+import os
 from app.services.search_service import SearchService
 
 router = APIRouter()
+# 初始化搜索服务
 search_service = SearchService()
 
 @router.get("/")

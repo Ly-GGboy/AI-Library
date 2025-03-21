@@ -30,14 +30,17 @@ export const useDocStore = defineStore('doc', {
     async loadDocSubtree(path: string) {
       // 设置特定路径的加载状态
       this.subTreeLoading[path] = true
+      console.log(`开始加载子树: ${path}`);
       
       try {
         const subtree = await docApi.getDocSubtree(path)
+        console.log(`子树加载成功: ${path}, 子节点数: ${subtree?.children?.length || 0}`);
         
         // 递归函数查找目标节点
         const updateNode = (node: DocTree, targetPath: string, newChildren: DocTree["children"]) => {
           if (node.path === targetPath) {
             // 找到目标节点，更新其子节点
+            console.log(`找到目标节点: ${targetPath}, 更新子节点数: ${newChildren?.length || 0}`);
             node.children = newChildren
             // 移除加载标记
             delete node.has_children
@@ -58,7 +61,12 @@ export const useDocStore = defineStore('doc', {
         
         // 更新文档树
         if (this.docTree) {
-          updateNode(this.docTree, path, subtree.children)
+          const updated = updateNode(this.docTree, path, subtree.children)
+          if (!updated) {
+            console.warn(`未找到目标节点 ${path} 来更新子树`);
+          }
+        } else {
+          console.warn(`文档树为空，无法更新子树 ${path}`);
         }
         
       } catch (err) {

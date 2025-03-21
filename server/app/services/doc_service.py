@@ -85,6 +85,16 @@ class DocService:
 
         # 缓存相关 - 减少缓存大小
         self._doc_tree_cache = None
+        # 启用分层加载策略，不使用树缓存
+        self._using_layered_loading = True
+        
+        # 缓存版本控制
+        self._cache_version = 0
+        self._cache_metadata = {}
+        
+        # PDF元数据缓存
+        self._pdf_metadata_cache = {}
+        self._pdf_metadata_ttl = 3600  # PDF元数据缓存1小时
         
         self._content_cache = {}
         self._content_cache_size = 50    # 减少缓存大小
@@ -189,8 +199,9 @@ class DocService:
         }
 
     def invalidate_tree_cache(self):
-        """使文档树缓存失效"""
-        self._doc_tree_cache = None
+        """使文档树缓存失效（现在只更新缓存版本号）"""
+        # 不再需要将缓存置为None
+        # self._doc_tree_cache = None
         self._cache_version += 1
 
     def invalidate_doc_cache(self, path: str):
@@ -400,16 +411,13 @@ class DocService:
             }
 
     async def _initialize_service(self):
-        """异步初始化服务，优化版本，不预加载PDF元数据"""
+        """异步初始化服务，简化版本，不预加载文档树"""
         try:
-            logging.info("开始初始化服务...")
+            logging.info("开始初始化服务（不预加载文档树）...")
             start_time = time.time()
             
             # 设置文件监控（同步操作）
             self._setup_file_watcher()
-            
-            # 预加载文档树
-            await self._preload_doc_tree()
             
             # 初始化在线阅读人数统计
             self._online_readers = {}
@@ -421,12 +429,15 @@ class DocService:
             
             end_time = time.time()
             logging.info(f"服务初始化完成，耗时: {end_time - start_time:.2f}秒")
+            
+            # 额外日志输出确认分层加载模式
+            logging.info("文档服务将使用分层加载模式，不使用文档树缓存")
         except Exception as e:
             logging.error(f"服务初始化失败: {str(e)}")
             # 即使初始化失败，也标记为就绪，以便服务可以响应请求
             self._service_ready = True
             self._ready_event.set()
-            
+
     async def wait_until_ready(self, timeout=None):
         """等待服务就绪"""
         try:
@@ -443,11 +454,8 @@ class DocService:
             logging.warning("服务尚未就绪，返回空文档树")
             return {"name": "root", "children": [], "status": "loading"}
             
-        # 使用简单的缓存策略
-        if self._doc_tree_cache:
-            return self._doc_tree_cache
-            
-        logging.info("构建文档树...")
+        # 不再使用缓存，始终重新构建树结构
+        logging.info("构建文档树 (使用分层加载模式)...")
         start_time = time.time()
         
         # 构建树结构，只加载顶层
@@ -459,11 +467,11 @@ class DocService:
             # 只加载顶层目录，深度为1
             await loop.run_in_executor(None, self._build_tree_sync_with_depth, self.docs_dir, tree, 1)
             
-            # 更新缓存
-            self._doc_tree_cache = tree
+            # 不再更新缓存
+            # self._doc_tree_cache = tree
             
             end_time = time.time()
-            logging.info(f"文档树构建完成，耗时: {end_time - start_time:.2f}秒")
+            logging.info(f"文档树构建完成，耗时: {end_time - start_time:.2f}秒，顶层目录数: {len(tree.get('children', []))}")
             
             return tree
         except Exception as e:
@@ -473,6 +481,9 @@ class DocService:
     async def get_doc_subtree(self, path: str) -> Dict:
         """获取指定路径的子树，用于按需加载"""
         try:
+            logging.info(f"开始加载子树: {path}...")
+            start_time = time.time()
+            
             # 获取绝对路径
             dir_path = os.path.join(self.docs_dir, path)
             
@@ -488,7 +499,9 @@ class DocService:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._build_tree_sync, dir_path, subtree)
             
-            logging.info(f"子树构建完成，路径: {path}, 子节点数量: {len(subtree.get('children', []))}")
+            end_time = time.time()
+            logging.info(f"子树加载完成: {path}, 耗时: {end_time - start_time:.2f}秒, 子节点数: {len(subtree.get('children', []))}")
+            
             return subtree
         except Exception as e:
             logging.error(f"获取子树失败: {str(e)}")
@@ -497,6 +510,8 @@ class DocService:
     def _build_tree_sync_with_depth(self, dir_path, parent_node, max_depth, current_depth=0):
         """同步构建有限深度的文档树"""
         try:
+            logging.debug(f"构建树 - 路径: {dir_path}, 深度: {current_depth}/{max_depth}")
+            
             # 一次性获取所有文件和目录
             all_items = os.listdir(dir_path)
             
@@ -539,10 +554,12 @@ class DocService:
                 
                 # 排序并添加文件节点
                 parent_node["children"].extend(self._sort_items(file_nodes))
+                logging.debug(f"添加了 {len(file_nodes)} 个文件节点到 {dir_path}")
                 # 释放内存
                 del file_nodes
             
             # 处理目录
+            dir_count = 0
             for dir_name in dirs:
                 dir_node = {"name": dir_name, "children": []}
                 sub_dir_path = os.path.join(dir_path, dir_name)
@@ -558,14 +575,18 @@ class DocService:
                 else:
                     # 如果达到最大深度，添加标记表示有子内容但未加载
                     dir_node["has_children"] = True
+                    logging.debug(f"目录 {rel_path} 达到最大深度，设置has_children=True标记")
                 
                 # 只有当目录非空或者有待加载子内容时才添加
                 if dir_node["children"] or dir_node.get("has_children", False):
                     parent_node["children"].append(dir_node)
+                    dir_count += 1
             
             # 对目录节点排序
             if parent_node["children"]:
                 parent_node["children"] = self._sort_items(parent_node["children"])
+                
+            logging.debug(f"完成构建树 - 路径: {dir_path}, 添加了 {dir_count} 个目录节点")
             
         except Exception as e:
             logging.error(f"处理目录 {dir_path} 时出错: {str(e)}")
@@ -744,26 +765,9 @@ class DocService:
             return breadcrumb 
 
     async def _preload_doc_tree(self):
-        """预加载文档树，避免第一次请求时的延迟"""
-        try:
-            logging.info("开始预加载文档树...")
-            start_time = time.time()
-            
-            # 构建树结构
-            tree = {"name": "root", "children": []}
-            
-            # 使用同步方法在线程池中执行
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._build_tree_sync, self.docs_dir, tree)
-            
-            # 更新缓存
-            self._doc_tree_cache = tree
-            
-            end_time = time.time()
-            logging.info(f"文档树预加载完成，耗时: {end_time - start_time:.2f}秒")
-        except Exception as e:
-            logging.error(f"预加载文档树出错: {str(e)}")
-            # 预加载失败不影响系统运行，只是第一次请求会慢一些 
+        """预加载文档树，避免第一次请求时的延迟（现在跳过预加载）"""
+        logging.info("跳过预加载文档树，将使用按需加载机制")
+        # 不再预加载文档树
 
     async def update_reader(self, ip_address: str, path: str = ""):
         """更新读者活跃状态"""

@@ -45,6 +45,45 @@ async def get_doc_subtree(path: str) -> Dict:
         logger.error(f"获取子树失败: {path}, 错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/debug/tree-has-children/{path:path}")
+async def debug_tree_has_children(path: str) -> Dict:
+    """调试端点：检查路径是否设置了has_children标记"""
+    try:
+        logger.info(f"调试：检查路径是否有子内容: {path}")
+        # 构建一个简单的树，只加载顶层内容
+        tree = await get_doc_service().get_doc_tree()
+        
+        # 递归查找节点
+        def find_node(node, target_path):
+            if node.get("path") == target_path:
+                return node
+            if node.get("children"):
+                for child in node["children"]:
+                    result = find_node(child, target_path)
+                    if result:
+                        return result
+            return None
+        
+        node = find_node(tree, path)
+        if not node:
+            return {"found": False, "message": "节点未找到"}
+        
+        has_children = node.get("has_children", False)
+        children_count = len(node.get("children", []))
+        
+        return {
+            "found": True,
+            "path": path,
+            "has_children": has_children,
+            "children_count": children_count,
+            "is_dir": node.get("is_dir", False),
+            "is_file": node.get("is_file", False),
+            "name": node.get("name", ""),
+        }
+    except Exception as e:
+        logger.error(f"调试has_children检查失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/content/{path:path}")
 async def get_doc_content(path: str, request: Request):
     """获取文档内容或文件"""

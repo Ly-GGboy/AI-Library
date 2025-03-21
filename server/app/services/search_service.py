@@ -9,22 +9,24 @@ from pathlib import Path
 
 class SearchService:
     def __init__(self):
+        """初始化搜索服务"""
         self.docs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static", "docs")
         self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static", "cache")
         self.index_path = os.path.join(self.cache_dir, "search_index.json")
-        
-        # 创建必要的目录
-        os.makedirs(self.docs_dir, exist_ok=True)
-        os.makedirs(self.cache_dir, exist_ok=True)
-        
-        # 初始化缓存
-        self.content_cache = {}
         self.file_index = {}
+        self.content_cache = {}
+        self.max_cache_size = 10  # 最大缓存文件数
+        
+        # 确保缓存目录存在
+        os.makedirs(self.cache_dir, exist_ok=True)
+        os.makedirs(self.docs_dir, exist_ok=True)
+        
+        # 加载索引
         self._load_index()
         
-        # 如果索引为空，打印提示信息
-        if not self.file_index:
-            print("Search index is empty. Please use the /api/search/rebuild-index endpoint to build the index.")
+        # 检查是否为空索引
+        self.is_empty = len(self.file_index) == 0
+        print(f"[INFO] 搜索服务初始化完成，索引文件数: {len(self.file_index)}, 是否为空: {self.is_empty}")
 
     def _load_index(self):
         """加载搜索索引"""
@@ -96,7 +98,7 @@ class SearchService:
             await self._update_index(file_path, content)
             
             # 限制缓存大小
-            if len(self.content_cache) > 1000:  # 最多缓存1000个文件
+            if len(self.content_cache) > self.max_cache_size:  # 最多缓存max_cache_size个文件
                 self.content_cache.pop(next(iter(self.content_cache)))
             
             return content
@@ -201,21 +203,33 @@ class SearchService:
                     
                     # 提取匹配上下文
                     matches = []
-                    lines = content.split('\n')
-                    for i, line in enumerate(lines, 1):
-                        if any(word in line.lower() for word in query_words):
-                            context_start = max(0, i - 2)
-                            context_end = min(len(lines), i + 2)
-                            context = '\n'.join(lines[context_start:context_end])
-                            
-                            matches.append({
-                                "type": "content",
-                                "text": context,
-                                "line": i
-                            })
-                            
-                            if len(matches) >= 3:  # 限制每个文件的匹配数
-                                break
+                    
+                    # 先检查文件名是否匹配
+                    name_matches = [word for word in query_words if word in file_name.lower()]
+                    if name_matches:
+                        matches.append({
+                            "type": "title",
+                            "text": file_name,
+                            "line": 0
+                        })
+                    
+                    # 然后检查内容匹配（仅对Markdown文件）
+                    if file_type == 'md':
+                        lines = content.split('\n')
+                        for i, line in enumerate(lines, 1):
+                            if any(word in line.lower() for word in query_words):
+                                context_start = max(0, i - 2)
+                                context_end = min(len(lines), i + 2)
+                                context = '\n'.join(lines[context_start:context_end])
+                                
+                                matches.append({
+                                    "type": "content",
+                                    "text": context,
+                                    "line": i
+                                })
+                                
+                                if len(matches) >= 3:  # 限制每个文件的匹配数
+                                    break
                     
                     if matches:
                         print(f"[DEBUG] 找到内容匹配: {rel_path}, 匹配数: {len(matches)}")

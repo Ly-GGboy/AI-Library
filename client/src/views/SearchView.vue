@@ -3,7 +3,7 @@
     <!-- 顶部导航栏 - 毛玻璃效果 -->
     <header class="header glass-effect dark:glass-effect-dark sticky top-0 z-10">
       <div class="header-content max-w-7xl mx-auto">
-        <router-link to="/" class="home-link">
+        <router-link to="/" class="home-link" @click="clearSearchParams">
           <HomeIcon class="home-icon" />
           <span class="home-text">首页</span>
         </router-link>
@@ -313,6 +313,11 @@ const formatDate = (dateString: string) => {
     month: 'long',
     day: 'numeric'
   })
+}
+
+const clearSearchParams = () => {
+  // 不使用router导航，而是直接修改window.location
+  window.location.href = '/'
 }
 </script>
 
