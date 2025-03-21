@@ -292,6 +292,9 @@ class DocService:
             # 清理缓存
             await self._cleanup_expired_cache()
             
+            # 清理过期的在线读者
+            await self._cleanup_expired_readers()
+            
             logging.debug("维护任务完成")
             return True
         except Exception as e:
@@ -407,6 +410,10 @@ class DocService:
             
             # 预加载文档树
             await self._preload_doc_tree()
+            
+            # 初始化在线阅读人数统计
+            self._online_readers = {}
+            self._online_expiry = 300  # 5分钟不活跃视为离线
             
             # 标记服务为就绪状态
             self._service_ready = True
@@ -757,3 +764,67 @@ class DocService:
         except Exception as e:
             logging.error(f"预加载文档树出错: {str(e)}")
             # 预加载失败不影响系统运行，只是第一次请求会慢一些 
+
+    async def update_reader(self, ip_address: str, path: str = ""):
+        """更新读者活跃状态"""
+        try:
+            current_time = time.time()
+            
+            # 更新或添加读者记录
+            self._online_readers[ip_address] = {
+                "last_active": current_time,
+                "current_path": path
+            }
+            
+            logging.debug(f"更新读者状态成功: IP={ip_address}, 路径={path}, 当前在线数={len(self._online_readers)}")
+            return True
+        except Exception as e:
+            logging.error(f"更新读者状态失败: {str(e)}")
+            return False
+            
+    async def _cleanup_expired_readers(self):
+        """清理过期的读者记录"""
+        try:
+            current_time = time.time()
+            expired_readers = []
+            
+            for ip, data in self._online_readers.items():
+                if current_time - data["last_active"] > self._online_expiry:
+                    expired_readers.append(ip)
+                    logging.debug(f"发现过期读者: IP={ip}, 最后活跃时间={data['last_active']}, 超时={current_time - data['last_active']}秒")
+            
+            # 清理前记录总数
+            before_count = len(self._online_readers)
+            
+            for ip in expired_readers:
+                del self._online_readers[ip]
+                
+            # 清理后记录总数
+            after_count = len(self._online_readers)
+                
+            if expired_readers:
+                logging.info(f"清理了 {len(expired_readers)} 个过期读者记录, 清理前={before_count}, 清理后={after_count}")
+        except Exception as e:
+            logging.error(f"清理过期读者记录时出错: {str(e)}")
+            
+    async def get_online_readers_count(self) -> int:
+        """获取当前在线阅读人数"""
+        try:
+            # 清理前记录总数
+            before_count = len(self._online_readers)
+            
+            # 顺便清理过期记录
+            await self._cleanup_expired_readers()
+            
+            # 清理后的在线数量
+            after_count = len(self._online_readers)
+            
+            if before_count != after_count:
+                logging.debug(f"清理前在线人数={before_count}, 清理后在线人数={after_count}")
+            
+            logging.debug(f"当前在线读者IP列表: {list(self._online_readers.keys())}")
+            
+            return after_count
+        except Exception as e:
+            logging.error(f"获取在线读者数量时出错: {str(e)}")
+            return 0 

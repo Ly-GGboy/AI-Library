@@ -1,0 +1,64 @@
+{
+  "docs": [
+    {
+      "path": "/docs/doc1",
+      "title": "示例文档 1",
+      "visits": 82,
+      "rating": 4.8
+    },
+    {
+      "path": "/docs/doc2",
+      "title": "示例文档 2",
+      "visits": 107,
+      "rating": 5.0
+    },
+    {
+      "path": "/docs/doc3",
+      "title": "示例文档 3",
+      "visits": 144,
+      "rating": 4.3
+    },
+    {
+      "path": "/docs/doc4",
+      "title": "示例文档 4",
+      "visits": 98,
+      "rating": 4.8
+    },
+    {
+      "path": "/docs/doc5",
+      "title": "示例文档 5",
+      "visits": 122,
+      "rating": 4.6
+    },
+    {
+      "path": "/docs/doc6",
+      "title": "示例文档 6",
+      "visits": 139,
+      "rating": 4.2
+    },
+    {
+      "path": "/docs/doc7",
+      "title": "示例文档 7",
+      "visits": 193,
+      "rating": 4.2
+    },
+    {
+      "path": "/docs/doc8",
+      "title": "示例文档 8",
+      "visits": 56,
+      "rating": 4.8
+    },
+    {
+      "path": "/docs/doc9",
+      "title": "示例文档 9",
+      "visits": 94,
+      "rating": 5.0
+    },
+    {
+      "path": "/docs/doc10",
+      "title": "示例文档 10",
+      "visits": 79,
+      "rating": 4.2
+    }
+  ]
+}

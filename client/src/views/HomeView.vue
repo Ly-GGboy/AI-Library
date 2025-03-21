@@ -6,6 +6,14 @@
         <div class="flex items-center justify-between h-16">
           <div class="flex items-center">
             <h1 class="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">文档中心</h1>
+            
+            <!-- 在线阅读人数 -->
+            <div class="ml-4 flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full text-sm" title="当前在线阅读人数">
+              <UserGroupIcon class="w-4 h-4 text-primary-500 mr-1" />
+              <span class="font-medium text-primary-500">{{ onlineReadersCount }}</span>
+              <span class="ml-1 hidden sm:inline">在线</span>
+            </div>
+            
             <a 
               href="https://github.com/Ly-GGboy/AI-Library" 
               target="_blank" 
@@ -14,7 +22,7 @@
               title="查看GitHub源码"
             >
               <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.236 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
               </svg>
             </a>
           </div>
@@ -148,7 +156,7 @@
                 getVisitedGradientClass(index)
               ]">
                 <component 
-                  :is="getVisitedRandomIcon(index)" 
+                  :is="getVisitedRandomIcon(index, article.type)" 
                   class="w-16 h-16"
                   :class="getVisitedIconColorClass(index)"
                 />
@@ -157,6 +165,7 @@
                 <h3 class="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100 line-clamp-1">{{ article.name }}</h3>
                 <div class="flex items-center justify-between mt-4">
                   <span class="text-xs text-gray-500 dark:text-gray-400">最近访问</span>
+                  <span v-if="article.size" class="text-xs text-gray-500 dark:text-gray-400">约 {{ getArticleReadingTime(article) }} 分钟阅读</span>
                 </div>
               </div>
             </router-link>
@@ -175,7 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch, ref } from 'vue'
+import { onMounted, watch, ref, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDocStore } from '../stores/doc'
 import { useThemeStore } from '../stores/theme'
@@ -197,7 +206,8 @@ import {
   SparklesIcon,
   VariableIcon,
   SunIcon,
-  MoonIcon
+  MoonIcon,
+  UserGroupIcon
 } from '@heroicons/vue/24/outline'
 import SearchBar from '../components/SearchBar.vue'
 import DocTree from '../components/DocTree.vue'
@@ -205,6 +215,7 @@ import AnnouncementButton from '../components/announcement/AnnouncementButton.vu
 import AnnouncementBoard from '../components/announcement/AnnouncementBoard.vue'
 import { storeToRefs } from 'pinia'
 import type { DocTree as DocTreeType, DocContent } from '../services/api'
+import { docApi } from '../services/api'
 import type { ComponentPublicInstance } from 'vue'
 
 const route = useRoute()
@@ -218,11 +229,24 @@ const { toggleTheme } = themeStore
 const { hasNewUpdates } = storeToRefs(announcementStore)
 const themeButtonHover = ref(false)
 
+// 在线阅读人数
+const onlineReadersCount = ref(0)
+let onlineReadersTimer: any = null
+
+const fetchOnlineReadersCount = async () => {
+  try {
+    const response = await docApi.getOnlineReadersCount()
+    onlineReadersCount.value = response.count
+  } catch (error) {
+    console.error('获取在线阅读人数失败:', error)
+  }
+}
+
 // 标签页切换
 const activeTab = ref('recent') // 'recent' 或 'visited'
 
 // 最近访问的文章
-const recentArticles = ref<Array<{path: string, name: string}>>([])
+const recentArticles = ref<Array<{path: string, name: string, size?: number, type?: 'markdown' | 'pdf', page_count?: number}>>([])
 const RECENT_ARTICLES_KEY = 'recent-articles'
 const MAX_RECENT_ARTICLES = 6
 
@@ -242,10 +266,16 @@ const loadRecentArticles = () => {
 }
 
 // 添加文章到最近访问
-const addToRecentArticles = (path: string, name: string) => {
+const addToRecentArticles = (path: string, name: string, metadata?: {size?: number, type?: 'markdown' | 'pdf', page_count?: number}) => {
   if (!path || !name) return
   
-  const article = { path, name }
+  const article = { 
+    path, 
+    name,
+    size: metadata?.size,
+    type: metadata?.type,
+    page_count: metadata?.page_count
+  }
   console.log('Current recent articles before update:', recentArticles.value)
   
   // 移除已存在的相同文章（如果有）
@@ -309,6 +339,19 @@ onMounted(async () => {
       localStorage.setItem(storageKey, 'true')
     }
   }
+  
+  // 获取在线阅读人数
+  fetchOnlineReadersCount();
+  // 设置定时刷新
+  onlineReadersTimer = setInterval(fetchOnlineReadersCount, 60000); // 每分钟更新一次
+})
+
+// 在组件卸载时清除定时器
+onUnmounted(() => {
+  if (onlineReadersTimer) {
+    clearInterval(onlineReadersTimer);
+    onlineReadersTimer = null;
+  }
 })
 
 // 监听 hash 变化
@@ -336,23 +379,32 @@ watch(activeTab, (newTab) => {
 // 在路由变化时更新最近访问记录
 watch(() => route.params.path, (newPath) => {
   if (typeof newPath === 'string' && docTree.value) {
-    // 从文档树中查找文章名称
-    const findArticleName = (node: DocTreeType, path: string): string | null => {
+    // 从文档树中查找文章信息
+    const findArticleInfo = (node: DocTreeType, path: string): {name: string, size?: number, type?: 'markdown' | 'pdf', page_count?: number} | null => {
       if (node.path === path) {
-        return node.name.replace(/\.(md|pdf)$/, '')
+        return {
+          name: node.name.replace(/\.(md|pdf)$/, ''),
+          size: node.size,
+          type: node.type as 'markdown' | 'pdf' | undefined,
+          page_count: node.page_count
+        }
       }
       if (node.children) {
         for (const child of node.children) {
-          const found = findArticleName(child, path)
+          const found = findArticleInfo(child, path)
           if (found) return found
         }
       }
       return null
     }
 
-    const name = findArticleName(docTree.value, newPath)
-    if (name) {
-      addToRecentArticles(newPath, name)
+    const articleInfo = findArticleInfo(docTree.value, newPath)
+    if (articleInfo) {
+      addToRecentArticles(newPath, articleInfo.name, {
+        size: articleInfo.size,
+        type: articleInfo.type,
+        page_count: articleInfo.page_count
+      })
     }
   }
 })
@@ -437,23 +489,31 @@ const getTimeAgo = (dateString: string) => {
 
 // 估算阅读时间
 const getReadingTime = (doc: DocContent) => {
-  // 如果是 PDF 且有预估时间，直接使用
-  if (doc.type === 'pdf' && doc.estimated_reading_time) {
-    return doc.estimated_reading_time;
+  // 如果没有大小信息，返回默认值
+  if (!doc.size) {
+    return 1;
   }
   
-  // 如果是 Markdown 且有文件大小信息，根据大小计算
-  if (doc.type === 'markdown' && doc.size) {
-    // 假设平均每个中文字符占3字节，每分钟阅读200个字
+  // PDF和MD文件使用不同的计算方式
+  if (doc.type === 'pdf') {
+    // PDF文件：假设每页大约2分钟，如果有页数信息则使用
+    if (doc.page_count) {
+      return Math.max(1, Math.ceil(doc.page_count * 2));
+    }
+    
+    // 如果没有页数信息，按照大小估算
+    // 平均每页约100KB
+    const estimatedPages = Math.ceil(doc.size / (100 * 1024));
+    return Math.max(1, estimatedPages * 2);
+  } else {
+    // Markdown文件：按照文本内容计算
+    // 假设平均每个中文字符占3字节，每分钟阅读300个字
     const charsPerByte = 1/3;  // 每字节对应的字符数
-    const wordsPerMinute = 200;
+    const wordsPerMinute = 300;
     const charCount = doc.size * charsPerByte;
     const minutes = Math.ceil(charCount / wordsPerMinute);
     return Math.max(1, minutes); // 至少1分钟
   }
-  
-  // 如果没有足够信息，返回默认值
-  return 1;
 }
 
 // 获取最近访问的渐变背景类名
@@ -483,7 +543,13 @@ const getVisitedIconColorClass = (index: number) => {
 }
 
 // 获取最近访问的随机图标
-const getVisitedRandomIcon = (index: number) => {
+const getVisitedRandomIcon = (index: number, type?: string) => {
+  // 对于PDF文件，固定使用DocumentTextIcon
+  if (type === 'pdf') {
+    return DocumentTextIcon;
+  }
+  
+  // 其他类型使用随机图标
   const icons = [
     AcademicCapIcon,
     BeakerIcon,
@@ -499,7 +565,6 @@ const getVisitedRandomIcon = (index: number) => {
     SparklesIcon,
     VariableIcon,
     BookOpenIcon,
-    DocumentTextIcon
   ]
   // 使用 index 作为种子来保证每次渲染相同位置的图标都是一样的
   const randomIndex = Math.abs(Math.sin(index + 1) * icons.length) | 0
@@ -512,6 +577,35 @@ const onSearch = (query: string) => {
     name: 'search',
     query: { q: query }
   })
+}
+
+// 估算文章阅读时间
+const getArticleReadingTime = (article: {size?: number, name: string, type?: 'markdown' | 'pdf', page_count?: number}) => {
+  // 如果没有大小信息，返回默认值
+  if (!article.size) {
+    return 1;
+  }
+  
+  // 根据文件类型使用不同的计算方法
+  if (article.type === 'pdf') {
+    // PDF文件：假设每页大约2分钟，如果有页数信息则使用
+    if (article.page_count) {
+      return Math.max(1, Math.ceil(article.page_count * 2));
+    }
+    
+    // 如果没有页数信息，按照大小估算
+    // 平均每页约100KB
+    const estimatedPages = Math.ceil(article.size / (100 * 1024));
+    return Math.max(1, estimatedPages * 2);
+  } else {
+    // Markdown文件：按照文本内容计算
+    // 假设平均每个中文字符占3字节，每分钟阅读300个字
+    const charsPerByte = 1/3;  // 每字节对应的字符数
+    const wordsPerMinute = 300;
+    const charCount = article.size * charsPerByte;
+    const minutes = Math.ceil(charCount / wordsPerMinute);
+    return Math.max(1, minutes); // 至少1分钟
+  }
 }
 </script>
 

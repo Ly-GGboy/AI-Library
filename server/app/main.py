@@ -145,8 +145,8 @@ async def perform_maintenance():
         except Exception as e:
             logging.error(f"维护任务出错: {str(e)}")
         
-        # 每5分钟执行一次
-        await asyncio.sleep(300)
+        # 每天执行一次
+        await asyncio.sleep(86400)
 
 @app.on_event("startup")
 async def startup_event():

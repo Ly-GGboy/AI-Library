@@ -14,7 +14,13 @@ def get_doc_service():
     return DocService()
 
 def get_stats_service():
-    return StatsService()
+    # 获取项目根目录
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    # 创建数据目录路径
+    data_dir = os.path.join(project_root, 'server', 'static', 'stats')
+    # 确保目录存在
+    os.makedirs(data_dir, exist_ok=True)
+    return StatsService(data_dir)
 
 @router.get("/tree")
 async def get_doc_tree() -> Dict:
@@ -40,9 +46,23 @@ async def get_doc_subtree(path: str) -> Dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/content/{path:path}")
-async def get_doc_content(path: str):
+async def get_doc_content(path: str, request: Request):
     """获取文档内容或文件"""
     try:
+        # 获取真实IP地址（考虑代理情况）
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # X-Forwarded-For格式为: client, proxy1, proxy2, ...
+            ip_address = forwarded_for.split(",")[0].strip()
+            logger.debug(f"文档访问 - 从X-Forwarded-For获取IP: {ip_address}")
+        else:
+            ip_address = request.client.host
+            logger.debug(f"文档访问 - 从client.host获取IP: {ip_address}")
+        
+        # 更新在线状态
+        await get_doc_service().update_reader(ip_address, path)
+        logger.debug(f"已更新用户状态: {ip_address} 访问文档 {path}")
+        
         # 获取文件路径和MIME类型
         file_path, mime_type = await get_doc_service().get_file_response(path)
         
@@ -71,6 +91,7 @@ async def get_doc_content(path: str):
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        logger.error(f"获取文档内容失败: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/metadata/{path:path}")
@@ -99,6 +120,33 @@ async def get_breadcrumb(path: str) -> List[Dict]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/stats/online-readers")
+async def get_online_readers(request: Request):
+    """获取当前在线阅读人数"""
+    try:
+        # 获取真实IP地址（考虑代理情况）
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # X-Forwarded-For格式为: client, proxy1, proxy2, ...
+            ip_address = forwarded_for.split(",")[0].strip()
+            logger.debug(f"从X-Forwarded-For获取IP: {ip_address}")
+        else:
+            ip_address = request.client.host
+            logger.debug(f"从client.host获取IP: {ip_address}")
+        
+        # 更新在线状态
+        await get_doc_service().update_reader(ip_address, "homepage")
+        logger.debug(f"已更新用户状态: {ip_address} 在首页")
+        
+        # 获取总数
+        count = await get_doc_service().get_online_readers_count()
+        logger.debug(f"当前在线用户数: {count}")
+        
+        return {"count": count}
+    except Exception as e:
+        logger.error(f"获取在线读者数量出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/{doc_path:path}")
 async def get_doc(
     doc_path: str,
@@ -115,7 +163,7 @@ async def get_doc(
         stats_service.record_visit(doc_path, user_id)
         
         # 获取文档内容
-        doc = doc_service.get_doc(doc_path)
+        doc = await doc_service.get_doc_content(doc_path)
         if not doc:
             raise HTTPException(status_code=404, detail="文档不存在")
         return doc

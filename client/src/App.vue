@@ -23,15 +23,17 @@
 </template>
 
 <script setup lang="ts">
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useReadingStore } from './stores/reading'
 import { useThemeStore } from './stores/theme'
 import { computed, onMounted, watch, ref } from 'vue'
 import ReadingControls from './components/ReadingControls.vue'
+import { docApi } from './services/api'
 
 const readingStore = useReadingStore()
 const themeStore = useThemeStore()
 const route = useRoute()
+const router = useRouter()
 
 // 初始加载状态
 const isLoading = ref(true)
@@ -70,6 +72,9 @@ onMounted(() => {
   
   // 预加载常用组件
   prefetchComponents()
+  
+  // 初始化时更新在线状态
+  updateOnlineStatus()
 })
 
 // 预加载常用组件
@@ -79,6 +84,36 @@ const prefetchComponents = () => {
   // 预加载MarkdownViewer组件
   import('./components/MarkdownViewer.vue')
 }
+
+// 更新在线状态
+const updateOnlineStatus = async () => {
+  try {
+    // 获取当前路径
+    const currentPath = route.path
+    
+    // 首页路径，直接请求在线人数统计API来更新状态
+    if (currentPath === '/') {
+      await docApi.getOnlineReadersCount()
+      return
+    }
+    
+    // 文档页路径，通过获取文档内容来更新状态
+    if (currentPath.startsWith('/docs/')) {
+      const docPath = currentPath.replace('/docs/', '')
+      if (docPath) {
+        await docApi.getDocContent(docPath)
+      }
+    }
+  } catch (error) {
+    console.error('更新在线状态失败:', error)
+  }
+}
+
+// 监听路由变化
+watch(() => route.fullPath, () => {
+  // 当路由变化时，更新在线状态
+  updateOnlineStatus()
+})
 </script>
 
 <style>

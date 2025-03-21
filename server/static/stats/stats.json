@@ -1,0 +1,57 @@
+{
+  "total_visits": 1994,
+  "unique_visitors": 792,
+  "avg_daily_visits": 285,
+  "bounce_rate": 32.3,
+  "daily_data": [
+    {
+      "date": "2025-03-21",
+      "total_visits": 135,
+      "unique_visitors": 81,
+      "avg_duration": 213,
+      "bounce_rate": 37.9
+    },
+    {
+      "date": "2025-03-20",
+      "total_visits": 200,
+      "unique_visitors": 150,
+      "avg_duration": 169,
+      "bounce_rate": 33.5
+    },
+    {
+      "date": "2025-03-19",
+      "total_visits": 334,
+      "unique_visitors": 59,
+      "avg_duration": 62,
+      "bounce_rate": 28.2
+    },
+    {
+      "date": "2025-03-18",
+      "total_visits": 232,
+      "unique_visitors": 65,
+      "avg_duration": 213,
+      "bounce_rate": 31.6
+    },
+    {
+      "date": "2025-03-17",
+      "total_visits": 381,
+      "unique_visitors": 159,
+      "avg_duration": 165,
+      "bounce_rate": 37.8
+    },
+    {
+      "date": "2025-03-16",
+      "total_visits": 377,
+      "unique_visitors": 81,
+      "avg_duration": 181,
+      "bounce_rate": 33.6
+    },
+    {
+      "date": "2025-03-15",
+      "total_visits": 335,
+      "unique_visitors": 197,
+      "avg_duration": 256,
+      "bounce_rate": 23.7
+    }
+  ]
+}

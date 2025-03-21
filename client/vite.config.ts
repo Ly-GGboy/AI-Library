@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { fileURLToPath } from 'url'
+import { fileURLToPath } from 'node:url'
 import { visualizer } from 'rollup-plugin-visualizer'
 import viteCompression from 'vite-plugin-compression'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -66,11 +68,16 @@ export default defineConfig({
     assetsInlineLimit: 4096,
   },
   server: {
+    https: {
+      key: fs.readFileSync(path.resolve(process.cwd(), '../certs/key.pem')),
+      cert: fs.readFileSync(path.resolve(process.cwd(), '../certs/cert.pem')),
+    },
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000/',
+        target: 'https://localhost:8000/',
         changeOrigin: true,
-        ws: true
+        ws: true,
+        secure: false 
       }
     }
   },
