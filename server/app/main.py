@@ -8,7 +8,7 @@ import logging
 import gc
 import psutil
 from app.services.doc_service import DocService
-from app.services.search_service import SearchService
+from app.services.meilisearch_service import MeiliSearchService
 
 app = FastAPI(
     title="AI Library API",
@@ -63,7 +63,7 @@ async def health_check(request: Request):
 async def detailed_health_check():
     """详细的健康检查，包括服务状态"""
     doc_service = DocService()
-    search_service = SearchService()
+    meili_search_service = MeiliSearchService()
     
     # 检查文件监视器状态
     watcher_status = "unknown"
@@ -82,10 +82,13 @@ async def detailed_health_check():
         "locks_count": len(doc_service._cache_locks)
     }
     
-    # 检查搜索索引状态
-    search_status = {
-        "index_size": len(search_service.file_index)
-    }
+    # 检查MeiliSearch状态
+    search_status = {"using": "meilisearch"}
+    try:
+        meili_status = await meili_search_service.check_status()
+        search_status.update(meili_status)
+    except Exception as e:
+        search_status["error"] = str(e)
     
     # 获取内存使用情况
     process = psutil.Process()
@@ -154,33 +157,45 @@ async def startup_event():
     # 启动定期维护任务
     asyncio.create_task(perform_maintenance())
     
-    # 在后台任务中检查和构建搜索索引，避免阻塞主线程
-    asyncio.create_task(check_and_build_search_index())
+    # 在后台任务中检查MeiliSearch状态
+    asyncio.create_task(check_meilisearch_status())
     
     print("Application started with maintenance tasks.")
 
-async def check_and_build_search_index():
-    """异步检查并构建搜索索引的后台任务"""
+async def check_meilisearch_status():
+    """异步检查MeiliSearch状态的后台任务"""
     try:
-        search_service = SearchService()
-        if len(search_service.file_index) == 0:
-            print("[INFO] 搜索索引为空，即将在后台构建索引...")
-            # 设置较长的超时时间，处理大文件集合
-            try:
-                # 使用较长的超时防止大型索引构建被中断
-                await asyncio.wait_for(search_service.build_index(), timeout=3600)  # 1小时超时
-                print("[INFO] 搜索索引构建完成")
-            except asyncio.TimeoutError:
-                print("[ERROR] 搜索索引构建超时，请手动重建索引或检查文件量")
-            except Exception as e:
-                import traceback
-                print(f"[ERROR] 搜索索引构建失败: {str(e)}")
-                traceback.print_exc()
-                print("[INFO] 系统将继续运行，但搜索功能可能不可用，请手动重建索引")
-        else:
-            print(f"[INFO] 搜索索引已加载，包含 {len(search_service.file_index)} 个文件")
+        meili_search_service = MeiliSearchService()
+        print("[INFO] 检查MeiliSearch服务状态...")
+        
+        # 检查MeiliSearch状态
+        try:
+            status = await meili_search_service.check_status()
+            if status.get("status") == "available":
+                print(f"[INFO] MeiliSearch服务可用: {status}")
+                # 检查是否需要构建索引
+                if not status.get("index_exists") or status.get("document_count", 0) == 0:
+                    print("[INFO] MeiliSearch索引不存在或为空，即将在后台构建索引...")
+                    try:
+                        # 使用较长的超时防止大型索引构建被中断
+                        await asyncio.wait_for(meili_search_service.build_index(), timeout=3600)  # 1小时超时
+                        print("[INFO] MeiliSearch索引构建完成")
+                    except asyncio.TimeoutError:
+                        print("[ERROR] MeiliSearch索引构建超时，请手动重建索引")
+                    except Exception as e:
+                        import traceback
+                        print(f"[ERROR] MeiliSearch索引构建失败: {str(e)}")
+                        traceback.print_exc()
+                else:
+                    print(f"[INFO] MeiliSearch索引已存在，包含 {status.get('document_count', 0)} 个文档")
+            else:
+                print(f"[WARNING] MeiliSearch服务不可用: {status}")
+        except Exception as e:
+            print(f"[ERROR] 连接MeiliSearch失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
     except Exception as e:
-        print(f"[ERROR] 检查搜索索引时出错: {str(e)}")
+        print(f"[ERROR] 检查MeiliSearch状态时出错: {str(e)}")
         # 记录详细错误信息，但允许应用继续启动
         import traceback
         traceback.print_exc()

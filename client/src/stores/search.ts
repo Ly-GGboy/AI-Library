@@ -10,7 +10,6 @@ interface SearchResult {
     text: string
     line: number
   }>
-  last_modified: string
   relevance_score: number
 }
 
@@ -29,8 +28,6 @@ interface SearchParams {
   sort_by?: string
   sort_order?: string
   doc_type?: string
-  date_from?: string
-  date_to?: string
 }
 
 export const useSearchStore = defineStore('search', () => {

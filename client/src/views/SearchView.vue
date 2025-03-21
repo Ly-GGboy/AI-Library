@@ -27,38 +27,11 @@
       <div class="advanced-search max-w-3xl mx-auto mt-4 px-4">
         <div class="glass-card dark:glass-card-dark">
           <div class="flex flex-wrap gap-3">
-            <select v-model="searchParams.doc_type" class="form-select">
+            <select v-model="searchParams.doc_type" class="form-select" @change="onDocTypeChange($event)">
               <option value="all">所有文档类型</option>
               <option value="md">Markdown</option>
               <option value="pdf">PDF</option>
             </select>
-            
-            <select v-model="searchParams.sort_by" class="form-select">
-              <option value="relevance">按相关度排序</option>
-              <option value="date">按日期排序</option>
-              <option value="name">按名称排序</option>
-            </select>
-            
-            <select v-model="searchParams.sort_order" class="form-select">
-              <option value="desc">降序</option>
-              <option value="asc">升序</option>
-            </select>
-            
-            <div class="date-range flex flex-wrap gap-2 items-center">
-              <input
-                type="date"
-                v-model="searchParams.date_from"
-                class="form-input"
-                placeholder="开始日期"
-              />
-              <span class="text-gray-500 dark:text-gray-400">至</span>
-              <input
-                type="date"
-                v-model="searchParams.date_to"
-                class="form-input"
-                placeholder="结束日期"
-              />
-            </div>
           </div>
         </div>
       </div>
@@ -117,7 +90,6 @@
                     <p class="match-text dark:text-gray-400">{{ match.text }}</p>
                   </div>
                 </div>
-                <span class="result-date dark:text-gray-500">{{ formatDate(result.last_modified) }}</span>
               </div>
             </router-link>
           </div>
@@ -187,13 +159,11 @@ const { toggleTheme } = themeStore
 const searchQuery = ref(route.query.q as string || '')
 const searchParams = ref({
   q: searchQuery.value,
-  page: Number(route.query.page) || 1,
+  page: 1,
   per_page: 10,
-  sort_by: route.query.sort_by as string || 'relevance',
-  sort_order: route.query.sort_order as string || 'desc',
-  doc_type: route.query.doc_type === 'all' ? undefined : route.query.doc_type as string || 'all',
-  date_from: route.query.date_from as string || '',
-  date_to: route.query.date_to as string || ''
+  sort_by: 'relevance',
+  sort_order: 'desc',
+  doc_type: 'all'
 })
 
 // 计算要显示的页码
@@ -237,20 +207,6 @@ const highlightMatch = (text: string) => {
 // 执行搜索
 const performSearch = async () => {
   await searchStore.search(searchParams.value)
-  
-  // 更新URL参数
-  router.push({
-    query: {
-      ...route.query,
-      q: searchParams.value.q,
-      page: String(searchParams.value.page),
-      sort_by: searchParams.value.sort_by,
-      sort_order: searchParams.value.sort_order,
-      doc_type: searchParams.value.doc_type,
-      date_from: searchParams.value.date_from,
-      date_to: searchParams.value.date_to
-    }
-  })
 }
 
 // 处理搜索事件
@@ -271,52 +227,25 @@ const changePage = (page: number) => {
   }
 }
 
-// 监听路由参数变化
-watch(
-  () => route.query,
-  (newQuery) => {
-    if (newQuery.q !== searchParams.value.q) {
-      searchParams.value = {
-        ...searchParams.value,
-        q: newQuery.q as string || '',
-        page: Number(newQuery.page) || 1
-      }
-      performSearch()
-    }
+// 处理文档类型变化
+const onDocTypeChange = (event: Event) => {
+  const newType = (event.target as HTMLSelectElement).value
+  searchParams.value = {
+    ...searchParams.value,
+    doc_type: newType,
+    page: 1 // 重置页码
   }
-)
-
-// 监听高级搜索参数变化
-watch(
-  () => [
-    searchParams.value.sort_by,
-    searchParams.value.sort_order,
-    searchParams.value.doc_type,
-    searchParams.value.date_from,
-    searchParams.value.date_to
-  ],
-  () => {
-    searchParams.value.page = 1 // 重置页码
-    performSearch()
-  }
-)
-
-// 初始搜索
-if (searchQuery.value) {
   performSearch()
 }
 
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
+// 只在初始加载时执行一次搜索
+onMounted(() => {
+  if (searchQuery.value) {
+    performSearch()
+  }
+})
 
 const clearSearchParams = () => {
-  // 不使用router导航，而是直接修改window.location
   window.location.href = '/'
 }
 </script>
@@ -486,10 +415,6 @@ const clearSearchParams = () => {
   @apply text-gray-600 dark:text-gray-300 mt-1;
 }
 
-.result-date {
-  @apply text-sm text-gray-500 dark:text-gray-400 mt-3 block;
-}
-
 /* 表单元素 */
 .form-select,
 .form-input {
@@ -536,10 +461,6 @@ const clearSearchParams = () => {
   }
   
   .form-select, .form-input {
-    @apply w-full;
-  }
-  
-  .date-range {
     @apply w-full;
   }
 }

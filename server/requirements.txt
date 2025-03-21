@@ -13,4 +13,5 @@ psutil==5.9.6
 PyPDF2==3.0.1
 python-magic==0.4.27
 hypercorn==0.15.0
-PyMuPDF==1.23.5 
+PyMuPDF==1.23.5
+meilisearch-python-async==1.8.1 
