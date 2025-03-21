@@ -154,4 +154,13 @@ async def startup_event():
     # 启动定期维护任务
     asyncio.create_task(perform_maintenance())
     
-    print("Application started with maintenance tasks. If search index is empty, please use the /api/search/rebuild-index endpoint to build it.")
+    # 检查搜索索引是否为空，如果为空则构建
+    search_service = SearchService()
+    if len(search_service.file_index) == 0:
+        print("[INFO] 搜索索引为空，正在自动构建索引...")
+        await search_service.build_index()
+        print("[INFO] 搜索索引构建完成")
+    else:
+        print(f"[INFO] 搜索索引已加载，包含 {len(search_service.file_index)} 个文件")
+    
+    print("Application started with maintenance tasks.")
