@@ -18,7 +18,7 @@ class MeiliSearchService:
         """初始化 MeiliSearch 搜索服务"""
         # MeiliSearch 连接配置
         self.host = os.environ.get("MEILISEARCH_HOST", "http://localhost:7700")
-        self.api_key = os.environ.get("MEILISEARCH_API_KEY", "7UXgJozgBG2tmw4iHcarumM3D4MBVA7QOt78sXN2Tc")
+        self.api_key = os.environ.get("MEILISEARCH_API_KEY", "masterKey")
         self.index_name = "documents"
         
         # 文档和缓存目录

@@ -14,7 +14,6 @@
 import { computed, onMounted, watch, nextTick } from 'vue'
 import { marked } from 'marked'
 import Prism from 'prismjs'
-import 'prismjs/themes/prism-tomorrow.css'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-python'
@@ -177,7 +176,7 @@ onMounted(() => {
 }
 
 :deep(.markdown-body pre) {
-  @apply bg-gray-800 text-white p-4 rounded-lg dark:bg-gray-900;
+  @apply bg-gray-100 text-gray-800 p-4 rounded-lg dark:bg-gray-900 dark:text-white;
   max-width: 100%;
   overflow-x: auto;
 }
@@ -187,9 +186,9 @@ onMounted(() => {
 }
 
 :deep(.markdown-body pre code) {
-  @apply text-white bg-transparent;
-  color: #fff !important;
+  @apply bg-transparent;
   background-color: transparent !important;
+  color: inherit !important;
 }
 
 :deep(.markdown-body img) {
@@ -230,5 +229,121 @@ onMounted(() => {
   .markdown-viewer {
     @apply px-4;
   }
+}
+</style>
+
+<!-- Add custom Prism syntax highlighting styles -->
+<style>
+/* Prism syntax highlighting for light/dark mode */
+/* Token styling for light mode */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #5e6e77;
+}
+
+.token.punctuation {
+  color: #5F6368;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #e3116c;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #067d17;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #a67f59;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #0b51c1;
+}
+
+.token.function,
+.token.class-name {
+  color: #c18401;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #e90;
+}
+
+/* Dark mode overrides */
+.dark .token.comment,
+.dark .token.prolog,
+.dark .token.doctype,
+.dark .token.cdata {
+  color: #8292a2;
+}
+
+.dark .token.punctuation {
+  color: #9EACB9;
+}
+
+.dark .token.property,
+.dark .token.tag,
+.dark .token.boolean,
+.dark .token.number,
+.dark .token.constant,
+.dark .token.symbol,
+.dark .token.deleted {
+  color: #ff79c6;
+}
+
+.dark .token.selector,
+.dark .token.attr-name,
+.dark .token.string,
+.dark .token.char,
+.dark .token.builtin,
+.dark .token.inserted {
+  color: #50fa7b;
+}
+
+.dark .token.operator,
+.dark .token.entity,
+.dark .token.url,
+.dark .language-css .token.string,
+.dark .style .token.string {
+  color: #f1fa8c;
+}
+
+.dark .token.atrule,
+.dark .token.attr-value,
+.dark .token.keyword {
+  color: #8be9fd;
+}
+
+.dark .token.function,
+.dark .token.class-name {
+  color: #bd93f9;
+}
+
+.dark .token.regex,
+.dark .token.important,
+.dark .token.variable {
+  color: #ffb86c;
 }
 </style> 
