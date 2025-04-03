@@ -6,12 +6,12 @@
     <div v-else-if="error" class="error">
       {{ error }}
     </div>
-    <div v-else class="markdown-body" v-html="renderedContent"></div>
+    <div v-else ref="markdownBodyRef" class="markdown-body" v-html="renderedContent"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch, nextTick } from 'vue'
+import { computed, onMounted, watch, nextTick, ref } from 'vue'
 import { marked } from 'marked'
 import Prism from 'prismjs'
 import 'prismjs/components/prism-typescript'
@@ -31,6 +31,7 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const markdownBodyRef = ref<HTMLElement | null>(null)
 
 // 获取当前文档的基础路径
 const getBasePath = () => {
@@ -43,8 +44,6 @@ const renderer = new marked.Renderer()
 
 // 重写图片渲染方法
 renderer.image = (href: string, title: string, text: string) => {
-  console.log('Rendering image:', { href, title, text })
-  
   // 如果已经是完整的 URL，直接使用
   if (href && href.startsWith('http')) {
     // do nothing
@@ -66,9 +65,7 @@ renderer.image = (href: string, title: string, text: string) => {
   }
 
   // 始终返回 img 标签，不再检查文件扩展名
-  const result = `<img src="${href}" alt="${text}"${title ? ` title="${title}"` : ''} class="markdown-image" loading="lazy">`
-  console.log('Generated img tag:', result)
-  return result
+  return `<img src="${href}" alt="${text}"${title ? ` title="${title}"` : ''} class="markdown-image" loading="lazy">`
 }
 
 const renderedContent = computed(() => {
@@ -80,18 +77,14 @@ const renderedContent = computed(() => {
     // 预处理 Markdown 内容
     let processedContent = props.content
     
-    console.log('Original content:', processedContent)
-    
     // 处理相对路径
     const basePath = getBasePath()
-    console.log('Base path:', basePath)
     
     if (basePath) {
       // 替换图片路径 - 修改正则表达式以匹配更多格式
       processedContent = processedContent.replace(
         /!\[(.*?)\]\((.*?)\)/g,  // 修改正则以匹配所有图片语法
         (match, alt, path) => {
-          console.log('Found image:', { match, alt, path })
           // 如果路径已经是完整URL或API路径，直接使用
           if (path.startsWith('http') || path.startsWith('/api/')) {
             return match
@@ -101,9 +94,7 @@ const renderedContent = computed(() => {
             ? `${basePath}${path}`
             : `${basePath}${path}`
           const encodedPath = imagePath.split('/').map(part => encodeURIComponent(part)).join('/')
-          const result = `![${alt}](/api/docs/content/${encodedPath})`
-          console.log('Processed to:', result)
-          return result
+          return `![${alt}](/api/docs/content/${encodedPath})`
         }
       )
       
@@ -111,47 +102,96 @@ const renderedContent = computed(() => {
       processedContent = processedContent.replace(
         /(?<!!)\[([^\]]+)\]\((?!http|\/api)(.*?)\)/g,  // 修改正则以排除图片语法
         (match, text, path) => {
-          console.log('Found link:', { match, text, path })
-          const result = `[${text}](/api/docs/content/${basePath}${path})`
-          console.log('Processed to:', result)
-          return result
+          return `[${text}](/api/docs/content/${basePath}${path})`
         }
       )
     }
 
-    console.log('Final processed content:', processedContent)
-
-    // 使用marked处理Markdown
-    const html = marked(processedContent, {
+    // 扩展marked选项，改进代码块渲染
+    const markedOptions = {
       gfm: true,
       breaks: true,
       renderer,
-      pedantic: false
-    })
+      pedantic: false,
+      highlight: function(code: string, lang: string) {
+        // 保留language-xxxx类名，让Prism能够识别语言
+        if (lang && Prism.languages[lang]) {
+          try {
+            return `<pre class="language-${lang}"><code class="language-${lang}">${Prism.highlight(code, Prism.languages[lang], lang)}</code></pre>`;
+          } catch (err) {
+            console.error('Prism highlighting error:', err);
+          }
+        }
+        
+        // 无法识别语言时，使用普通代码块
+        return `<pre><code>${code}</code></pre>`;
+      }
+    };
+
+    // 使用marked处理Markdown
+    const html = marked(processedContent, markedOptions);
     
-    // 检查生成的HTML
-    console.log('Generated HTML:', html)
-    
-    return html
+    return html;
   } catch (error) {
     console.error('Error rendering markdown:', error)
     return '<div class="error">Error rendering content</div>'
   }
 })
 
-// 监听内容变化
+// 监听内容变化并优化代码高亮
 watch(() => props.content, () => {
   nextTick(() => {
     try {
-      Prism.highlightAll()
+      // 找到容器元素
+      const container = markdownBodyRef.value;
+      if (!container) return;
+      
+      // 只处理没有语言类的代码块，因为有语言类的已经在marked渲染时处理过了
+      const unlabeledCodeBlocks = container.querySelectorAll('pre code:not([class*="language-"])');
+      if (unlabeledCodeBlocks.length > 0) {
+        unlabeledCodeBlocks.forEach((block) => {
+          // 尝试检测语言
+          const text = block.textContent || '';
+          // 根据内容尝试猜测语言
+          let detectedLang = '';
+          
+          // 简单启发式检测
+          if (text.includes('function') && text.includes('{') && text.includes('}')) {
+            detectedLang = 'javascript';
+          } else if (text.includes('def ') && text.includes(':')) {
+            detectedLang = 'python';
+          } else if (text.includes('class ') && text.includes('{') && text.includes('public')) {
+            detectedLang = 'java';
+          } else if (text.includes('import ') && text.includes('from ')) {
+            detectedLang = 'python';
+          }
+          
+          // 如果检测到可能的语言，设置类并高亮
+          if (detectedLang && Prism.languages[detectedLang]) {
+            block.className = `language-${detectedLang}`;
+            Prism.highlightElement(block);
+          }
+        });
+      }
     } catch (error) {
-      console.error('Error highlighting code:', error)
+      console.error('Error highlighting unlabeled code blocks:', error)
     }
   })
 }, { immediate: true })
 
 onMounted(() => {
-  Prism.highlightAll()
+  // 初次加载时可能需要处理未识别语言的代码块
+  nextTick(() => {
+    if (markdownBodyRef.value) {
+      const unlabeledCodeBlocks = markdownBodyRef.value.querySelectorAll('pre code:not([class*="language-"])');
+      if (unlabeledCodeBlocks.length > 0) {
+        unlabeledCodeBlocks.forEach((block) => {
+          // 使用通用样式高亮
+          Prism.highlightElement(block);
+        });
+      }
+    }
+  });
 })
 </script>
 
