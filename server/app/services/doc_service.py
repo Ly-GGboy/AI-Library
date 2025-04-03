@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set, Any
 import aiofiles
 from datetime import datetime
 import mimetypes
@@ -14,6 +14,9 @@ import magic
 from PyPDF2 import PdfReader
 import asyncio
 from functools import lru_cache
+from pathlib import Path
+import signal
+from collections import OrderedDict
 
 # 设置日志级别为 DEBUG
 logging.basicConfig(
@@ -39,6 +42,128 @@ class DocChangeHandler(FileSystemEventHandler):
             else:
                 rel_path = os.path.relpath(event.src_path, self.doc_service.docs_dir)
                 self.doc_service.invalidate_doc_cache(rel_path)
+
+class LRUCache:
+    """基于 OrderedDict 的 LRU 缓存实现，线程安全"""
+    
+    def __init__(self, capacity: int, ttl: int = 3600):
+        """
+        初始化 LRU 缓存
+        
+        Args:
+            capacity: 缓存最大容量
+            ttl: 缓存条目的生存时间(秒)，默认1小时
+        """
+        self.capacity = capacity
+        self.ttl = ttl
+        self.cache = OrderedDict()  # {key: (value, timestamp)}
+        self._lock = Lock()
+        self._stats = {"hits": 0, "misses": 0, "evictions": 0, "expirations": 0}
+    
+    async def get(self, key: str) -> Any:
+        """
+        获取缓存项，如存在则更新访问顺序
+        
+        Args:
+            key: 缓存键
+            
+        Returns:
+            缓存值或 None (如果不存在或已过期)
+        """
+        async with self._lock:
+            if key not in self.cache:
+                self._stats["misses"] += 1
+                return None
+                
+            value, timestamp = self.cache[key]
+            current_time = time.time()
+            
+            # 检查是否过期
+            if current_time - timestamp > self.ttl:
+                self.cache.pop(key)
+                self._stats["expirations"] += 1
+                self._stats["misses"] += 1
+                return None
+            
+            # 更新访问顺序 (移到末尾，表示最近使用)
+            self.cache.move_to_end(key)
+            self._stats["hits"] += 1
+            return value
+    
+    async def put(self, key: str, value: Any) -> None:
+        """
+        添加或更新缓存项
+        
+        Args:
+            key: 缓存键
+            value: 缓存值
+        """
+        async with self._lock:
+            if key in self.cache:
+                self.cache.pop(key)
+            elif len(self.cache) >= self.capacity:
+                # 移除最少使用的项 (OrderedDict 第一项)
+                self.cache.popitem(last=False)
+                self._stats["evictions"] += 1
+                
+            self.cache[key] = (value, time.time())
+    
+    async def remove(self, key: str) -> bool:
+        """
+        移除缓存项
+        
+        Args:
+            key: 缓存键
+            
+        Returns:
+            是否成功移除
+        """
+        async with self._lock:
+            if key in self.cache:
+                self.cache.pop(key)
+                return True
+            return False
+    
+    async def clear(self) -> None:
+        """清空缓存"""
+        async with self._lock:
+            self.cache.clear()
+    
+    async def cleanup_expired(self) -> int:
+        """
+        清理过期项
+        
+        Returns:
+            已清理的项数
+        """
+        async with self._lock:
+            current_time = time.time()
+            expired_keys = [
+                k for k, (_, timestamp) in self.cache.items()
+                if current_time - timestamp > self.ttl
+            ]
+            
+            for key in expired_keys:
+                self.cache.pop(key)
+                self._stats["expirations"] += 1
+                
+            return len(expired_keys)
+    
+    async def get_stats(self) -> Dict[str, Any]:
+        """获取缓存统计数据"""
+        async with self._lock:
+            stats = self._stats.copy()
+            if (stats["hits"] + stats["misses"]) > 0:
+                stats["hit_ratio"] = stats["hits"] / (stats["hits"] + stats["misses"])
+            else:
+                stats["hit_ratio"] = 0
+            stats["size"] = len(self.cache)
+            stats["capacity"] = self.capacity
+            return stats
+    
+    def __len__(self) -> int:
+        """获取当前缓存大小"""
+        return len(self.cache)
 
 class DocService:
     _instance = None
@@ -83,36 +208,54 @@ class DocService:
         
         mimetypes.init()
 
-        # 缓存相关 - 减少缓存大小
+        # 缓存相关 - 改进缓存策略
         self._doc_tree_cache = None
         # 启用分层加载策略，不使用树缓存
         self._using_layered_loading = True
         
         # 缓存版本控制
         self._cache_version = 0
-        self._cache_metadata = {}
+        
+        # 使用 LRU 缓存替代原始简单缓存
+        self._content_cache_ttl = 3600    # 缓存生存时间 1 小时
+        self._content_cache_size = 200    # 增加缓存容量到 200
+        self._content_cache = LRUCache(capacity=self._content_cache_size, ttl=self._content_cache_ttl)
         
         # PDF元数据缓存
-        self._pdf_metadata_cache = {}
-        self._pdf_metadata_ttl = 3600  # PDF元数据缓存1小时
+        self._pdf_metadata_ttl = 7200    # 延长缓存时间到 2 小时
+        self._pdf_metadata_size = 150    # 增加缓存容量到 150
+        self._pdf_metadata_cache = LRUCache(capacity=self._pdf_metadata_size, ttl=self._pdf_metadata_ttl)
         
-        self._content_cache = {}
-        self._content_cache_size = 50    # 减少缓存大小
-        self._content_cache_ttl = 3600   # 缓存1小时
+        # 面包屑导航缓存，容量可以更大一些因为它们很小
+        self._breadcrumb_cache = LRUCache(capacity=300, ttl=86400)  # 1 天过期
         
+        # 最近文档缓存
         self._recent_docs_cache = None
         self._recent_docs_last_check = 0
-        self._recent_docs_ttl = 1800     # 缓存30分钟
-        
-        self._breadcrumb_cache = {}
+        self._recent_docs_ttl = 1800      # 保持 30 分钟
         
         # 缓存控制
         self._global_cache_lock = Lock()
         self._cache_locks = {}
         
+        # 在线读者相关
+        self._online_readers = {}          # 在线读者列表
+        self._online_expiry = 300          # 在线状态过期时间（秒）
+        
         # 服务就绪状态
         self._service_ready = False
         self._ready_event = asyncio.Event()
+        
+        # 缓存统计
+        self._cache_stats = {
+            "content": {"hits": 0, "misses": 0},
+            "pdf_metadata": {"hits": 0, "misses": 0},
+            "breadcrumb": {"hits": 0, "misses": 0}
+        }
+        
+        # 热门文档集合（用于缓存预热）
+        self._hot_documents = set()
+        self._hot_document_access_count = {}
         
         # 初始化服务（异步）
         asyncio.create_task(self._initialize_service())
@@ -206,10 +349,8 @@ class DocService:
 
     def invalidate_doc_cache(self, path: str):
         """使特定文档的缓存失效"""
-        if path in self._content_cache:
-            del self._content_cache[path]
-        if path in self._breadcrumb_cache:
-            del self._breadcrumb_cache[path]
+        asyncio.create_task(self._content_cache.remove(path))
+        asyncio.create_task(self._breadcrumb_cache.remove(path))
         self._cache_version += 1
 
     def invalidate_recent_docs_cache(self):
@@ -223,10 +364,6 @@ class DocService:
             # 找出所有活跃的缓存键
             active_keys = set()
             
-            # 内容缓存相关的锁
-            for k in self._content_cache.keys():
-                active_keys.add(f"content:{k}")
-                
             # 树缓存锁
             active_keys.add("tree")
             
@@ -237,79 +374,97 @@ class DocService:
                 
             if unused_locks:
                 logging.debug(f"已清理 {len(unused_locks)} 个未使用的锁")
+                
+            return len(unused_locks)
         except Exception as e:
             logging.error(f"清理未使用锁时出错: {str(e)}")
+            return 0
 
     async def _cleanup_expired_cache(self):
         """清理过期缓存"""
         try:
             async with self._global_cache_lock:
-                current_time = time.time()
-                
-                # 清理过期的文档内容缓存
-                expired_content_keys = [
-                    k for k, v in self._content_cache.items()
-                    if current_time - v["cache_time"] > self._content_cache_ttl
-                ]
-                for key in expired_content_keys:
-                    del self._content_cache[key]
-                    if key in self._cache_metadata:
-                        del self._cache_metadata[key]
-                
-                # 清理过期的PDF元数据缓存
-                expired_pdf_keys = [
-                    k for k, v in self._pdf_metadata_cache.items()
-                    if current_time - v["cache_time"] > self._pdf_metadata_ttl
-                ]
-                for key in expired_pdf_keys:
-                    del self._pdf_metadata_cache[key]
-                
-                # 限制PDF元数据缓存大小
-                if len(self._pdf_metadata_cache) > 100:  # 最多缓存100个PDF元数据
-                    # 按最后访问时间排序，删除最旧的
-                    sorted_keys = sorted(
-                        self._pdf_metadata_cache.keys(),
-                        key=lambda k: self._pdf_metadata_cache[k]["cache_time"]
-                    )
-                    for key in sorted_keys[:-100]:  # 保留最新的100个
-                        del self._pdf_metadata_cache[key]
-                
-                # 清理元数据缓存中不存在于内容缓存的项
-                orphaned_metadata = [
-                    k for k in self._cache_metadata.keys()
-                    if k not in self._content_cache
-                ]
-                for key in orphaned_metadata:
-                    del self._cache_metadata[key]
+                # 调用各缓存的清理方法
+                content_expired = await self._content_cache.cleanup_expired()
+                pdf_expired = await self._pdf_metadata_cache.cleanup_expired()
+                breadcrumb_expired = await self._breadcrumb_cache.cleanup_expired()
                 
                 # 清理不再使用的锁
                 await self._cleanup_unused_locks()
                 
-                if expired_content_keys or expired_pdf_keys or orphaned_metadata:
+                if content_expired or pdf_expired or breadcrumb_expired:
                     logging.debug(
-                        f"缓存清理完成: 删除了 {len(expired_content_keys)} 个内容缓存, "
-                        f"{len(expired_pdf_keys)} 个PDF元数据缓存, "
-                        f"{len(orphaned_metadata)} 个孤立元数据"
+                        f"缓存清理完成: 删除了 {content_expired} 个内容缓存项, "
+                        f"{pdf_expired} 个PDF元数据缓存项, "
+                        f"{breadcrumb_expired} 个面包屑缓存项"
                     )
+                
+                # 返回清理的项目总数
+                return content_expired + pdf_expired + breadcrumb_expired
         except Exception as e:
             logging.error(f"清理缓存时出错: {str(e)}")
+            return 0
 
     async def perform_maintenance(self):
-        """执行维护任务，包括检查文件监视器和清理缓存"""
+        """执行维护任务，包括检查文件监视器、清理缓存和缓存预热"""
         try:
             # 检查文件监视器
             await self.check_file_watcher()
             
             # 清理缓存
-            await self._cleanup_expired_cache()
+            cleaned_items = await self._cleanup_expired_cache()
             
             # 清理过期的在线读者
             await self._cleanup_expired_readers()
             
-            logging.debug("维护任务完成")
+            # 缓存预热 - 确保热门文档在缓存中
+            await self._warm_cache()
+            
+            logging.debug(f"维护任务完成：清理了 {cleaned_items} 个缓存项")
             return True
         except Exception as e:
             logging.error(f"执行维护任务时出错: {str(e)}")
+            return False
+            
+    async def _warm_cache(self):
+        """缓存预热 - 预加载热门文档"""
+        if not self._hot_documents:
+            return
+            
+        try:
+            warmed_count = 0
+            for doc_path in list(self._hot_documents)[:20]:  # 最多预热20个文档
+                # 检查文档是否存在于缓存中
+                if not await self._content_cache.get(doc_path):
+                    try:
+                        # 预加载文档
+                        await self.get_doc_content(doc_path)
+                        warmed_count += 1
+                    except Exception as e:
+                        logging.error(f"预热缓存时无法加载文档 {doc_path}: {str(e)}")
+                        # 如果文档无法加载，从热门文档集合中移除
+                        self._hot_documents.discard(doc_path)
+                        if doc_path in self._hot_document_access_count:
+                            del self._hot_document_access_count[doc_path]
+            
+            if warmed_count > 0:
+                logging.debug(f"缓存预热完成，预加载了 {warmed_count} 个热门文档")
+        except Exception as e:
+            logging.error(f"缓存预热过程中出错: {str(e)}")
+            
+    async def reset_cache_stats(self):
+        """重置缓存统计信息"""
+        try:
+            await self._content_cache.clear()
+            await self._pdf_metadata_cache.clear()
+            await self._breadcrumb_cache.clear()
+            self._hot_documents.clear()
+            self._hot_document_access_count.clear()
+            self._cache_version += 1
+            logging.info("已重置所有缓存")
+            return True
+        except Exception as e:
+            logging.error(f"重置缓存统计信息时出错: {str(e)}")
             return False
 
     def _extract_number(self, name: str) -> tuple:
@@ -417,32 +572,50 @@ class DocService:
             }
 
     async def _initialize_service(self):
-        """异步初始化服务，简化版本，不预加载文档树"""
+        """初始化服务, 包括设置文件监视器和预加载缓存"""
         try:
-            logging.info("开始初始化服务（不预加载文档树）...")
-            start_time = time.time()
-            
-            # 设置文件监控（同步操作）
+            # 设置文件监视器
             self._setup_file_watcher()
             
-            # 初始化在线阅读人数统计
-            self._online_readers = {}
-            self._online_expiry = 300  # 5分钟不活跃视为离线
+            # 预加载文档树（现在跳过）
+            # await self._preload_doc_tree()
             
-            # 标记服务为就绪状态
+            # 服务就绪
             self._service_ready = True
             self._ready_event.set()
             
-            end_time = time.time()
-            logging.info(f"服务初始化完成，耗时: {end_time - start_time:.2f}秒")
+            # 启动定期维护任务
+            asyncio.create_task(self._schedule_maintenance())
             
-            # 额外日志输出确认分层加载模式
-            logging.info("文档服务将使用分层加载模式，不使用文档树缓存")
+            # 启动定期统计报告
+            asyncio.create_task(self._schedule_stats_report())
+            
+            logging.info("DocService 初始化完成，服务就绪")
         except Exception as e:
-            logging.error(f"服务初始化失败: {str(e)}")
-            # 即使初始化失败，也标记为就绪，以便服务可以响应请求
+            logging.error(f"初始化服务失败: {str(e)}")
+            # 尽管有错误，仍然标记服务为就绪以允许基本功能
             self._service_ready = True
             self._ready_event.set()
+            
+    async def _schedule_stats_report(self):
+        """定期报告缓存统计"""
+        while True:
+            try:
+                await asyncio.sleep(1800)  # 每30分钟报告一次
+                
+                # 获取缓存统计
+                stats = await self.get_cache_stats()
+                
+                # 记录统计信息
+                logging.info(f"缓存统计报告:")
+                logging.info(f"- 内容缓存: 大小={stats['content_cache']['size']}/{stats['content_cache']['capacity']}, 命中率={stats['content_cache']['hit_ratio']:.2f}")
+                logging.info(f"- PDF元数据缓存: 大小={stats['pdf_metadata_cache']['size']}/{stats['pdf_metadata_cache']['capacity']}, 命中率={stats['pdf_metadata_cache']['hit_ratio']:.2f}")
+                logging.info(f"- 面包屑缓存: 大小={stats['breadcrumb_cache']['size']}/{stats['breadcrumb_cache']['capacity']}, 命中率={stats['breadcrumb_cache']['hit_ratio']:.2f}")
+                logging.info(f"- 热门文档数量: {stats['hot_documents']}")
+                
+            except Exception as e:
+                logging.error(f"生成缓存统计报告时出错: {str(e)}")
+                await asyncio.sleep(300)  # 出错后等待5分钟再重试
 
     async def wait_until_ready(self, timeout=None):
         """等待服务就绪"""
@@ -694,8 +867,13 @@ class DocService:
             return None
 
     async def get_doc_content(self, path: str) -> Dict:
-        """获取文档内容，简化版本，减少内存使用"""
+        """获取文档内容，改进版本，使用LRU缓存并跟踪热门文档"""
         file_path = os.path.join(self.docs_dir, path)
+        
+        # 记录文档访问，更新热门文档集合
+        self._hot_document_access_count[path] = self._hot_document_access_count.get(path, 0) + 1
+        if self._hot_document_access_count[path] >= 5:  # 访问5次以上视为热门文档
+            self._hot_documents.add(path)
         
         # 简化文件存在检查
         if not os.path.exists(file_path):
@@ -703,21 +881,37 @@ class DocService:
         
         # 使用简单的扩展名检测
         if path.endswith('.pdf'):
-            # 对于PDF文件，只返回基本信息
+            # 对于PDF文件，尝试从缓存获取元数据
+            cached_pdf_data = await self._pdf_metadata_cache.get(path)
+            if cached_pdf_data:
+                return cached_pdf_data
+            
+            # 如果缓存未命中，获取基本信息
             try:
                 file_size = os.path.getsize(file_path)
                 last_modified = os.path.getmtime(file_path)
                 
-                return {
+                # 尝试获取PDF页数，但设置超时
+                try:
+                    page_count = await self._get_pdf_page_count_with_timeout(file_path)
+                except asyncio.TimeoutError:
+                    logging.warning(f"获取PDF页数超时: {path}")
+                    page_count = 0
+                
+                result = {
                     "path": path,
                     "type": "pdf",
                     "metadata": {
                         'file_size': file_size,
                         'last_modified': datetime.fromtimestamp(last_modified).isoformat(),
-                        'page_count': 0  # 不读取页数
+                        'page_count': page_count
                     },
                     "last_modified": datetime.fromtimestamp(last_modified).isoformat()
                 }
+                
+                # 缓存结果
+                await self._pdf_metadata_cache.put(path, result)
+                return result
             except Exception as e:
                 logging.error(f"获取PDF信息出错: {str(e)}")
                 return {
@@ -729,11 +923,9 @@ class DocService:
         # 对于Markdown文件
         if path.endswith('.md'):
             # 检查缓存
-            cache_key = path
-            if cache_key in self._content_cache:
-                cached_data = self._content_cache[cache_key]
-                if time.time() - cached_data["cache_time"] < self._content_cache_ttl:
-                    return cached_data["content"]
+            cached_data = await self._content_cache.get(path)
+            if cached_data:
+                return cached_data
 
             # 读取文件内容
             try:
@@ -764,20 +956,8 @@ class DocService:
                 "last_modified": datetime.fromtimestamp(last_modified).isoformat()
             }
 
-            # 更新缓存，限制缓存大小
-            if len(self._content_cache) >= self._content_cache_size:
-                # 简单地清除最旧的缓存项
-                oldest_key = min(
-                    self._content_cache.keys(),
-                    key=lambda k: self._content_cache[k]["cache_time"]
-                )
-                del self._content_cache[oldest_key]
-
-            self._content_cache[cache_key] = {
-                "content": result,
-                "cache_time": time.time()
-            }
-            
+            # 更新缓存
+            await self._content_cache.put(path, result)
             return result
 
         # 其他类型文件
@@ -835,26 +1015,30 @@ class DocService:
             return []
 
     async def get_breadcrumb(self, path: str) -> List[Dict]:
-        """获取文档的面包屑导航，带缓存"""
-        cache_key = f"breadcrumb:{path}"
-        async with self._cache_lock(cache_key):
-            if path in self._breadcrumb_cache:
-                return self._breadcrumb_cache[path]
+        """获取文档的面包屑导航，使用 LRU 缓存"""
+        # 尝试从缓存中获取
+        cached_breadcrumb = await self._breadcrumb_cache.get(path)
+        if cached_breadcrumb:
+            return cached_breadcrumb
 
-            parts = path.split('/')
-            breadcrumb = []
-            current_path = ""
-            
-            for part in parts:
-                current_path = os.path.join(current_path, part).replace('\\', '/')
-                breadcrumb.append({
-                    "name": part,
-                    "path": current_path
-                })
+        # 缓存未命中，创建面包屑
+        parts = path.split('/')
+        breadcrumb = []
+        current_path = ""
+        
+        for part in parts:
+            if not part:  # 跳过空部分
+                continue
+                
+            current_path = os.path.join(current_path, part).replace('\\', '/')
+            breadcrumb.append({
+                "name": part,
+                "path": current_path
+            })
 
-            # 缓存结果
-            self._breadcrumb_cache[path] = breadcrumb
-            return breadcrumb 
+        # 缓存结果
+        await self._breadcrumb_cache.put(path, breadcrumb)
+        return breadcrumb
 
     async def _preload_doc_tree(self):
         """预加载文档树，避免第一次请求时的延迟（现在跳过预加载）"""
@@ -924,3 +1108,27 @@ class DocService:
         except Exception as e:
             logging.error(f"获取在线读者数量时出错: {str(e)}")
             return 0 
+
+    async def get_cache_stats(self):
+        """获取所有缓存的统计信息"""
+        content_stats = await self._content_cache.get_stats()
+        pdf_stats = await self._pdf_metadata_cache.get_stats()
+        breadcrumb_stats = await self._breadcrumb_cache.get_stats()
+        
+        return {
+            "content_cache": content_stats,
+            "pdf_metadata_cache": pdf_stats,
+            "breadcrumb_cache": breadcrumb_stats,
+            "cache_version": self._cache_version,
+            "hot_documents": len(self._hot_documents)
+        } 
+
+    async def _schedule_maintenance(self):
+        """定期执行维护任务"""
+        while True:
+            try:
+                await asyncio.sleep(300)  # 每5分钟执行一次维护
+                await self.perform_maintenance()
+            except Exception as e:
+                logging.error(f"执行维护任务时出错: {str(e)}")
+                await asyncio.sleep(60)  # 出错后等待1分钟再尝试 

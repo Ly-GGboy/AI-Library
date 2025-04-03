@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // 配置默认基础 URL
 const baseURL = window.location.protocol === 'https:' 
-  ? '/api'  // 如果是 HTTPS，使用相对路径
+  ? `${window.location.origin}/api`  // 如果是 HTTPS，使用完整的源地址+/api路径
   : 'http://localhost:8000/api' // 如果是 HTTP，指定完整 URL
 
 // 将api变量导出以便其他模块直接使用
@@ -19,6 +19,8 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     console.debug(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, config.params || {});
+    // 添加更多调试信息
+    console.debug(`[API Config] baseURL: ${config.baseURL}, Full URL: ${config.baseURL}${config.url}`);
     return config
   },
   (error) => {
@@ -33,7 +35,12 @@ api.interceptors.response.use(
     return response
   },
   (error) => {
-    console.error('API Response Error:', error)
+    console.error('API Response Error:', error.message, error.config?.url);
+    if (error.response) {
+      console.error('Response data:', error.response.status, error.response.data);
+    } else if (error.request) {
+      console.error('Request error (no response):', error.request);
+    }
     
     // 处理重定向错误
     if (error.response && error.response.status === 307) {

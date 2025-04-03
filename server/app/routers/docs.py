@@ -1,14 +1,38 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request, Depends, Response
 from fastapi.responses import FileResponse, JSONResponse
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import os
 import json
 import logging
+import time
+from datetime import datetime, timedelta
 from app.services.doc_service import DocService
 from app.services.stats_service import StatsService
 
 router = APIRouter(prefix="", tags=["docs"])
 logger = logging.getLogger(__name__)
+
+class CompressedJSONResponse(JSONResponse):
+    """增强的JSON响应，确保内容被压缩且有适当的缓存控制"""
+    def __init__(
+        self, 
+        content: Any, 
+        max_age: int = 3600,  # 默认缓存1小时
+        status_code: int = 200, 
+        headers: Optional[Dict[str, str]] = None,
+        **kwargs
+    ):
+        if headers is None:
+            headers = {}
+        
+        # 添加缓存控制头
+        headers.update({
+            "Cache-Control": f"public, max-age={max_age}",
+            "Vary": "Accept-Encoding",  # 确保缓存考虑不同的编码
+            "ETag": f"\"{hash(str(content)) & 0xffffffff:08x}\"",  # 简单的ETag实现
+        })
+        
+        super().__init__(content, status_code, headers, **kwargs)
 
 def get_doc_service():
     return DocService()
@@ -23,15 +47,17 @@ def get_stats_service():
     return StatsService(data_dir)
 
 @router.get("/tree")
-async def get_doc_tree() -> Dict:
+async def get_doc_tree():
     """获取文档目录树"""
     try:
-        return await get_doc_service().get_doc_tree()
+        tree_data = await get_doc_service().get_doc_tree()
+        # 树数据可以缓存较长时间，因为它不经常变化
+        return CompressedJSONResponse(tree_data, max_age=7200)  # 缓存2小时
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/subtree/{path:path}")
-async def get_doc_subtree(path: str) -> Dict:
+async def get_doc_subtree(path: str):
     """获取指定路径的子树"""
     try:
         logger.info(f"正在获取子树: {path}")
@@ -40,7 +66,7 @@ async def get_doc_subtree(path: str) -> Dict:
             logger.error(f"获取子树失败: {path}, 错误: {result['error']}")
             raise HTTPException(status_code=400, detail=result["error"])
         logger.info(f"子树获取成功: {path}, 子节点数量: {len(result.get('children', []))}")
-        return result
+        return CompressedJSONResponse(result, max_age=3600)  # 缓存1小时
     except Exception as e:
         logger.error(f"获取子树失败: {path}, 错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -107,11 +133,12 @@ async def get_doc_content(path: str, request: Request):
         
         # 如果是Markdown文件，返回内容
         if path.endswith('.md'):
-            return await get_doc_service().get_doc_content(path)
+            content = await get_doc_service().get_doc_content(path)
+            return CompressedJSONResponse(content, max_age=3600)  # 缓存1小时
             
         # 如果是PDF文件，返回文件和正确的Content-Type
         if mime_type == 'application/pdf':
-            return FileResponse(
+            response = FileResponse(
                 file_path,
                 media_type=mime_type,
                 filename=os.path.basename(file_path),
@@ -120,13 +147,19 @@ async def get_doc_content(path: str, request: Request):
                     "Accept-Ranges": "bytes"  # 支持范围请求，用于大文件加载
                 }
             )
+            # 添加缓存控制
+            return add_cache_headers(response, max_age=7200)  # 缓存2小时
             
         # 其他类型文件
-        return FileResponse(
+        response = FileResponse(
             file_path,
             media_type=mime_type,
             filename=os.path.basename(file_path)
         )
+        # 为图片等静态资源添加较长的缓存时间
+        if mime_type and (mime_type.startswith('image/') or mime_type.startswith('font/')):
+            return add_cache_headers(response, max_age=604800)  # 缓存7天
+        return add_cache_headers(response)  # 默认缓存1小时
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -137,25 +170,31 @@ async def get_doc_content(path: str, request: Request):
 async def get_doc_metadata(path: str):
     """获取文档元数据，包括PDF的页数等信息"""
     try:
-        return await get_doc_service().get_doc_content(path)
+        content = await get_doc_service().get_doc_content(path)
+        # 元数据不经常变化，可以缓存较长时间
+        return CompressedJSONResponse(content, max_age=7200)  # 缓存2小时
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/recent")
-async def get_recent_docs(limit: int = 10) -> List[Dict]:
+async def get_recent_docs(limit: int = 10):
     """获取最近更新的文档"""
     try:
-        return await get_doc_service().get_recent_docs(limit)
+        data = await get_doc_service().get_recent_docs(limit)
+        # 最近文档变化较频繁，使用较短的缓存时间
+        return CompressedJSONResponse(data, max_age=900)  # 缓存15分钟
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/breadcrumb/{path:path}")
-async def get_breadcrumb(path: str) -> List[Dict]:
+async def get_breadcrumb(path: str):
     """获取文档的面包屑导航"""
     try:
-        return await get_doc_service().get_breadcrumb(path)
+        data = await get_doc_service().get_breadcrumb(path)
+        # 面包屑导航不经常变化
+        return CompressedJSONResponse(data, max_age=7200)  # 缓存2小时
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -181,7 +220,8 @@ async def get_online_readers(request: Request):
         count = await get_doc_service().get_online_readers_count()
         logger.debug(f"当前在线用户数: {count}")
         
-        return {"count": count}
+        # 在线读者数据频繁变化，使用短缓存
+        return CompressedJSONResponse({"count": count}, max_age=60)  # 缓存1分钟
     except Exception as e:
         logger.error(f"获取在线读者数量出错: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -205,10 +245,88 @@ async def get_doc(
         doc = await doc_service.get_doc_content(doc_path)
         if not doc:
             raise HTTPException(status_code=404, detail="文档不存在")
-        return doc
+            
+        # 根据文档类型确定缓存时间
+        max_age = 3600  # 默认1小时
+        if doc_path.endswith('.pdf'):
+            max_age = 7200  # PDF缓存2小时
+            
+        return CompressedJSONResponse(doc, max_age=max_age)
     except Exception as e:
         logger.error(f"获取文档失败: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"获取文档失败: {str(e)}"
         )
+
+@router.get("/debug/compression-test")
+async def compression_test(request: Request):
+    """测试压缩是否生效的调试端点"""
+    # 检查请求头是否支持压缩
+    accepts_encoding = request.headers.get("Accept-Encoding", "")
+    supports_gzip = "gzip" in accepts_encoding.lower()
+    
+    # 创建一些重复的数据以便演示压缩效果
+    # 真实场景中，压缩比可能在60-90%之间
+    original_data = {
+        "test": "compression_test" * 100,
+        "repeated_data": ["item" * 20] * 50,
+        "numbers": list(range(1000)),
+        "explanation": "这个响应包含重复数据，以便演示压缩效果。在真实场景中，文本和JSON数据通常有50-90%的压缩率。",
+        "original_size": 0,  # 将在下面计算
+        "supports_compression": supports_gzip,
+        "client_headers": {
+            "accept_encoding": accepts_encoding,
+            "user_agent": request.headers.get("User-Agent", "Unknown")
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # 估算原始大小
+    original_size = len(json.dumps(original_data))
+    original_data["original_size"] = original_size
+    
+    # 使用压缩响应
+    return CompressedJSONResponse(
+        original_data,
+        max_age=60,  # 短缓存，以便于测试
+        headers={
+            "X-Original-Size": str(original_size),
+            "X-Compression-Enabled": "true"
+        }
+    )
+
+# 添加缓存控制headers
+def add_cache_headers(response: Response, max_age: int = 3600):
+    """添加缓存控制头到响应"""
+    try:
+        response.headers["Cache-Control"] = f"public, max-age={max_age}"
+        response.headers["Vary"] = "Accept-Encoding"
+        
+        # FileResponse 需要特殊处理
+        if isinstance(response, FileResponse):
+            # 某些文件类型应添加额外的压缩提示
+            content_type = response.headers.get("Content-Type", "")
+            if any(ct in content_type.lower() for ct in ["text/", "application/json", "image/svg", "application/javascript"]):
+                response.headers["Content-Encoding"] = "gzip"  # 提示客户端内容已被压缩
+        
+        # 如果没有ETag，尝试添加简单的ETag
+        if not response.headers.get("ETag"):
+            try:
+                # 对于FileResponse，基于文件路径和修改日期创建ETag
+                if isinstance(response, FileResponse) and hasattr(response, "path"):
+                    file_path = str(response.path)
+                    m_time = os.path.getmtime(file_path)
+                    file_size = os.path.getsize(file_path)
+                    etag_data = f"{file_path}:{m_time}:{file_size}"
+                    response.headers["ETag"] = f"\"{hash(etag_data) & 0xffffffff:08x}\""
+                # 对于其他响应，基于响应体创建ETag
+                elif hasattr(response, "body"):
+                    response.headers["ETag"] = f"\"{hash(str(response.body)) & 0xffffffff:08x}\""
+            except Exception as e:
+                logger.warning(f"无法为响应生成ETag: {str(e)}")
+        
+        return response
+    except Exception as e:
+        logger.error(f"添加缓存头时出错: {str(e)}")
+        return response

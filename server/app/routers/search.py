@@ -68,11 +68,12 @@ async def search_docs(
                     date_to=date_to
                 )
             else:
-                # MeiliSearch不可用时返回错误信息
+                # MeiliSearch不可用时返回友好的错误信息
                 print(f"[WARNING] MeiliSearch服务不可用: {status}")
                 return {
                     "status": "error",
-                    "message": f"搜索服务暂时不可用: {status.get('status', 'unknown')}",
+                    "message": "搜索服务当前不可用。请联系管理员启动MeiliSearch服务。",
+                    "details": status,
                     "results": [],
                     "total": 0,
                     "page": page,
@@ -83,9 +84,17 @@ async def search_docs(
             print(f"[ERROR] 使用MeiliSearch搜索失败: {str(e)}")
             import traceback
             traceback.print_exc()
+            
+            # 提供更具体的错误信息
+            error_message = str(e)
+            if "Connection refused" in error_message:
+                error_message = "无法连接到搜索服务。请确保MeiliSearch服务已启动。"
+            elif "timeout" in error_message.lower():
+                error_message = "搜索服务响应超时。请稍后再试。"
+            
             return {
                 "status": "error",
-                "message": f"搜索服务错误: {str(e)}",
+                "message": error_message,
                 "results": [],
                 "total": 0,
                 "page": page,

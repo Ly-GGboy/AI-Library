@@ -9,6 +9,7 @@ import gc
 import psutil
 from app.services.doc_service import DocService
 from app.services.meilisearch_service import MeiliSearchService
+from app.routers import docs, search, announcements, feedback, admin
 
 app = FastAPI(
     title="AI Library API",
@@ -34,8 +35,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 启用压缩
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# 启用压缩 - 优化压缩设置
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
+
+# 包含路由
+app.include_router(docs.router, prefix="/api/docs", tags=["docs"])
+app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(announcements.router, prefix="/api/announcements", tags=["announcements"])
+app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # 性能监控中间件
 @app.middleware("http")
@@ -107,19 +115,9 @@ async def detailed_health_check():
         "uptime_seconds": time.time() - process.create_time()  # 运行时间（秒）
     }
 
-# 导入路由
-from app.routers import docs, search, announcements, feedback, admin
-
 # 初始化服务
 data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data")
 os.makedirs(data_dir, exist_ok=True)  # 确保数据目录存在
-
-# 注册路由
-app.include_router(docs.router, prefix="/api/docs", tags=["docs"])
-app.include_router(search.router, prefix="/api/search", tags=["search"])
-app.include_router(announcements.router, prefix="/api/announcements", tags=["announcements"])
-app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
-app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 # 定期维护任务
 async def perform_maintenance():

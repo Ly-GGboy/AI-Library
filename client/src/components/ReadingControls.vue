@@ -365,72 +365,112 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// 更新阅读进度 - 使用requestAnimationFrame优化性能
+// 更新阅读进度 - 优化性能和响应速度
 let progressUpdateTimer: number | null = null;
 let rafId: number | null = null;
-let lastScrollPosition = 0;
+let lastProgress = 0;
 let isUpdatingProgress = false;
 
 const updateProgress = () => {
-  // 如果已经在请求动画帧中，则不重复请求
-  if (rafId !== null) return;
+  // 如果已经在更新中，不重复执行
+  if (isUpdatingProgress) return;
   
   // 使用requestAnimationFrame获取最佳性能
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+  }
+  
   rafId = requestAnimationFrame(() => {
+    isUpdatingProgress = true;
     rafId = null;
     
-    // 获取当前文档类型
-    const currentDoc = docStore.currentDoc
-    if (!currentDoc) return
-    
-    // 根据文档类型使用不同的进度计算方式
-    if (currentDoc.type === 'pdf') {
-      // PDF 文档：使用当前页码和总页数
-      const pdfViewer = document.querySelector('.pdf-viewer')
-      if (pdfViewer) {
-        const currentPage = parseInt(pdfViewer.getAttribute('data-current-page') || '1')
-        const totalPages = parseInt(pdfViewer.getAttribute('data-total-pages') || '1')
-        progress.value = Math.round((currentPage / totalPages) * 100)
-      }
-    } else {
-      // Markdown 文档：使用滚动位置
-      const mainContent = document.querySelector('main')
-      if (!mainContent) return
+    try {
+      // 获取当前文档类型
+      const currentDoc = docStore.currentDoc
+      if (!currentDoc) return
       
-      // 获取当前滚动位置
-      const scrollTop = mainContent.scrollTop
-      
-      // 检测滚动变化是否显著 (避免微小抖动)
-      const isSignificantChange = Math.abs(scrollTop - lastScrollPosition) > 1;
-      
-      // 只有在滚动发生显著变化时才更新进度
-      if (isSignificantChange || !isUpdatingProgress) {
-        // 简化逻辑，使用主容器的滚动位置计算
+      // 根据文档类型使用不同的进度计算方式
+      if (currentDoc.type === 'pdf') {
+        // PDF 文档：使用当前页码和总页数
+        const pdfViewer = document.querySelector('.pdf-viewer')
+        if (pdfViewer) {
+          const currentPage = parseInt(pdfViewer.getAttribute('data-current-page') || '1')
+          const totalPages = parseInt(pdfViewer.getAttribute('data-total-pages') || '1')
+          const newProgress = Math.round((currentPage / totalPages) * 100)
+          
+          // 平滑过渡到新进度
+          smoothProgressTransition(newProgress);
+        }
+      } else {
+        // Markdown 文档：使用滚动位置
+        const mainContent = document.querySelector('main')
+        if (!mainContent) return
+        
+        // 获取当前滚动位置和容器尺寸
+        const scrollTop = mainContent.scrollTop
         const scrollHeight = mainContent.scrollHeight
         const clientHeight = mainContent.clientHeight
-        
-        // 总可滚动距离
         const scrollableDistance = scrollHeight - clientHeight
         
-        // 确保没有负值导致的异常计算
+        // 确保有可滚动区域
         if (scrollableDistance <= 0) {
-          progress.value = 0
-        } else {
-          // 确保滚动位置不超出边界
-          const boundedScrollTop = Math.max(0, Math.min(scrollTop, scrollableDistance))
-          
-          // 计算滚动百分比并确保在 0-100 范围内
-          const percentage = (boundedScrollTop / scrollableDistance) * 100
-          progress.value = Math.max(0, Math.min(100, Math.round(percentage)))
+          smoothProgressTransition(0);
+          return;
         }
         
-        // 保存最近一次滚动位置
-        lastScrollPosition = scrollTop
-        isUpdatingProgress = true;
+        // 计算新进度值（0-100）
+        const boundedScrollTop = Math.max(0, Math.min(scrollTop, scrollableDistance))
+        const newProgress = Math.round((boundedScrollTop / scrollableDistance) * 100)
+        
+        // 平滑过渡到新进度
+        smoothProgressTransition(newProgress);
       }
+    } finally {
+      isUpdatingProgress = false;
     }
   });
 }
+
+// 平滑过渡到新进度值
+const smoothProgressTransition = (targetProgress: number) => {
+  // 确保目标进度在有效范围内
+  targetProgress = Math.max(0, Math.min(100, targetProgress));
+  
+  // 如果变化很小，直接更新
+  if (Math.abs(targetProgress - progress.value) <= 1) {
+    progress.value = targetProgress;
+    return;
+  }
+  
+  // 计算步进值（根据距离决定速度）
+  const distance = Math.abs(targetProgress - progress.value);
+  const step = Math.max(1, Math.floor(distance / 10)); // 最小步进为1
+  
+  // 决定方向
+  const direction = targetProgress > progress.value ? 1 : -1;
+  
+  // 使用requestAnimationFrame实现平滑过渡
+  const animate = () => {
+    // 计算新的进度值
+    const newProgress = progress.value + (step * direction);
+    
+    // 检查是否到达目标
+    if ((direction > 0 && newProgress >= targetProgress) || 
+        (direction < 0 && newProgress <= targetProgress)) {
+      progress.value = targetProgress;
+      return;
+    }
+    
+    // 更新进度
+    progress.value = newProgress;
+    
+    // 继续动画
+    requestAnimationFrame(animate);
+  };
+  
+  // 开始动画
+  requestAnimationFrame(animate);
+};
 
 // 节流函数处理频繁的滚动事件
 const throttledScroll = (e: Event) => {
@@ -451,28 +491,27 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('keydown', handleKeydown)
   
-  // 更详细的滚动事件监听，使用passive选项提高性能
-  // 1. 监听主内容区域的滚动事件
-  const mainContent = document.querySelector('main')
+  // 优化滚动事件监听
+  const scrollHandler = () => {
+    if (progressUpdateTimer) {
+      clearTimeout(progressUpdateTimer);
+    }
+    progressUpdateTimer = window.setTimeout(updateProgress, 16); // 约60fps
+  };
+  
+  // 使用passive监听提高性能
+  window.addEventListener('scroll', scrollHandler, { passive: true });
+  
+  // 监听主内容区域滚动
+  const mainContent = document.querySelector('main');
   if (mainContent) {
-    // 移除可能存在的旧监听器，避免重复
-    mainContent.removeEventListener('scroll', throttledScroll)
-    // 添加新的监听器，使用passive选项提高滚动性能
-    mainContent.addEventListener('scroll', throttledScroll, { passive: true })
-    console.log('Added scroll listener to main content')
-  } else {
-    console.warn('Main content element not found')
+    mainContent.addEventListener('scroll', scrollHandler, { passive: true });
   }
   
-  // 2. 监听整个文档的滚动事件
-  window.removeEventListener('scroll', throttledScroll)
-  window.addEventListener('scroll', throttledScroll, { passive: true })
-  
-  // 3. 监听markdown-body内容区域（如果存在）
-  const markdownBody = document.querySelector('.markdown-body')
+  // 监听markdown内容区域滚动
+  const markdownBody = document.querySelector('.markdown-body');
   if (markdownBody) {
-    markdownBody.removeEventListener('scroll', throttledScroll)
-    markdownBody.addEventListener('scroll', throttledScroll, { passive: true })
+    markdownBody.addEventListener('scroll', updateProgress, { passive: true })
   }
 
   // 监听 PDF 页面变化事件
@@ -499,33 +538,51 @@ onMounted(() => {
   // 监听沉浸式阅读模式变化
   watch(() => readingStore.isImmersive, (newValue) => {
     isImmersive.value = newValue
-    console.log('Immersive mode changed:', newValue)
     
-    // 当切换到沉浸模式时，重新计算进度
+    // 当切换到沉浸模式时，立即重新计算进度
     if (newValue) {
       updateProgress()
     }
   }, { immediate: true })
+  
+  // 监听DOM变化，自动更新进度
+  if ('MutationObserver' in window) {
+    const progressObserver = new MutationObserver(() => {
+      // 当DOM结构发生变化时，重新计算进度
+      updateProgress();
+    });
+    
+    // 监视主容器的变化
+    if (mainContent) {
+      progressObserver.observe(mainContent, {
+        childList: true,
+        subtree: true,
+        attributes: false
+      });
+    }
+  }
 })
 
 // 组件卸载
 onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('keydown', handleKeydown)
-  window.removeEventListener('pdf-page-changed', updateProgress)
   
-  // 清理滚动事件监听器
-  window.removeEventListener('scroll', throttledScroll)
+  // 移除所有事件监听
+  window.removeEventListener('pdf-page-changed', updateProgress)
+  window.removeEventListener('scroll', updateProgress)
+  window.removeEventListener('update-progress-bar', updateProgress)
+  window.removeEventListener('update-progress', updateProgress)
   
   // 移除所有滚动监听器
   const mainContent = document.querySelector('main')
   if (mainContent) {
-    mainContent.removeEventListener('scroll', throttledScroll)
+    mainContent.removeEventListener('scroll', updateProgress)
   }
   
   const markdownBody = document.querySelector('.markdown-body')
   if (markdownBody) {
-    markdownBody.removeEventListener('scroll', throttledScroll)
+    markdownBody.removeEventListener('scroll', updateProgress)
   }
   
   // 清理requestAnimationFrame

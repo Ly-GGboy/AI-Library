@@ -45,8 +45,20 @@
 
       <!-- 错误提示 - 圆角卡片 -->
       <div v-else-if="error" class="error glass-card-error dark:glass-card-error-dark">
-        <ExclamationCircleIcon class="w-5 h-5 text-red-500 dark:text-red-400 mr-2" />
-        {{ error }}
+        <ExclamationCircleIcon class="w-6 h-6 text-red-500 dark:text-red-400 mr-2" />
+        <div class="error-content">
+          <h3 class="error-title">搜索服务出错</h3>
+          <p>{{ error }}</p>
+          <div class="error-actions">
+            <button @click="performSearch" class="retry-button">
+              <ArrowPathIcon class="w-4 h-4 mr-1" />
+              重试
+            </button>
+            <button @click="checkMeiliSearchStatus" class="check-status-button">
+              检查搜索服务状态
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- 无结果提示 - 圆角卡片 -->

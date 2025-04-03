@@ -167,4 +167,36 @@ async def reply_to_feedback(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error replying to feedback: {str(e)}"
+        )
+
+# 缓存统计API
+@router.get("/cache-stats", response_model=Dict[str, Any])
+async def get_cache_stats(
+    doc_service: DocService = Depends(get_doc_service)
+):
+    """获取缓存统计信息"""
+    try:
+        stats = await doc_service.get_cache_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"获取缓存统计信息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取缓存统计信息失败: {str(e)}"
+        )
+
+# 重置缓存API
+@router.post("/reset-cache", response_model=Dict[str, Any])
+async def reset_cache(
+    doc_service: DocService = Depends(get_doc_service)
+):
+    """重置文档缓存"""
+    try:
+        result = await doc_service.reset_cache_stats()
+        return {"success": result, "message": "缓存已重置"}
+    except Exception as e:
+        logger.error(f"重置缓存失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"重置缓存失败: {str(e)}"
         ) 
