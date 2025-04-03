@@ -74,7 +74,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://frp6.mmszxc.xin:18926/',
+        target: 'https://127.0.0.1:8000/',
         changeOrigin: true,
         ws: true,
         secure: false 

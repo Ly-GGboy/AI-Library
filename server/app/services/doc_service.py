@@ -335,17 +335,23 @@ class DocService:
             return (float('inf'), name)
 
     def _sort_items(self, items: List[Dict]) -> List[Dict]:
-        """排序文件或目录列表，使用缓存提高性能"""
+        """排序文件或目录列表，确保目录排在文件前面"""
         # 使用缓存避免重复计算排序键
         sort_keys = {}
         
         def get_sort_key(item):
+            # 首先按类型分类（目录在前，文件在后）
+            is_dir = item.get("is_dir", False)
+            
+            # 获取或计算排序键
             name = item["name"]
             if name not in sort_keys:
                 sort_keys[name] = self._extract_number(name)
-            return sort_keys[name]
+                
+            # 返回复合排序键：(类型优先级, 数字序号, 名称)
+            return (0 if is_dir else 1,) + sort_keys[name]
         
-        # 使用缓存的排序键进行排序
+        # 使用复合排序键进行排序
         return sorted(items, key=get_sort_key)
 
     async def get_file_response(self, path: str) -> tuple[str, str]:
@@ -464,19 +470,105 @@ class DocService:
         try:
             # 使用同步方法在线程池中执行，避免阻塞事件循环
             loop = asyncio.get_event_loop()
-            # 只加载顶层目录，深度为1
-            await loop.run_in_executor(None, self._build_tree_sync_with_depth, self.docs_dir, tree, 1)
+            # 修改为调用特殊的根目录构建方法，确保顶层目录和文件都包括在内
+            await loop.run_in_executor(None, self._build_root_tree_sync, self.docs_dir, tree)
             
             # 不再更新缓存
             # self._doc_tree_cache = tree
             
             end_time = time.time()
-            logging.info(f"文档树构建完成，耗时: {end_time - start_time:.2f}秒，顶层目录数: {len(tree.get('children', []))}")
+            logging.info(f"文档树构建完成，耗时: {end_time - start_time:.2f}秒，顶层节点数: {len(tree.get('children', []))}")
             
             return tree
         except Exception as e:
             logging.error(f"构建文档树出错: {str(e)}")
             return {"name": "root", "children": [], "error": str(e)}
+
+    def _build_root_tree_sync(self, dir_path, parent_node):
+        """特殊的根目录树构建方法，确保包含顶层目录和文件，但子目录仍然懒加载"""
+        try:
+            logging.debug(f"构建根目录树 - 路径: {dir_path}")
+            
+            # 一次性获取所有文件和目录
+            all_items = os.listdir(dir_path)
+            
+            # 预先分类，避免重复调用 os.path.isdir
+            dirs = []
+            files = []
+            
+            for item in all_items:
+                if item.startswith('.'):
+                    continue
+                    
+                item_path = os.path.join(dir_path, item)
+                try:
+                    if os.path.isdir(item_path):
+                        dirs.append(item)
+                    elif item.endswith(('.md', '.pdf')):
+                        files.append(item)
+                except Exception:
+                    continue
+            
+            # 处理文件 - 确保顶层目录下的文件被包括进来
+            if files:
+                file_nodes = []
+                rel_dir_path = os.path.relpath(dir_path, self.docs_dir)
+                rel_dir_path = '.' if rel_dir_path == '.' else rel_dir_path.replace('\\', '/')
+                
+                for file in files:
+                    file_path = os.path.join(rel_dir_path, file)
+                    if rel_dir_path == '.':
+                        file_path = file
+                    
+                    file_type = "markdown" if file.endswith('.md') else "pdf"
+                    
+                    file_nodes.append({
+                        "name": file,
+                        "path": file_path.replace('\\', '/'),
+                        "type": file_type,
+                        "is_file": True
+                    })
+                
+                # 排序并添加文件节点
+                parent_node["children"].extend(self._sort_items(file_nodes))
+                logging.debug(f"添加了 {len(file_nodes)} 个文件节点到根目录")
+                # 释放内存
+                del file_nodes
+            
+            # 处理目录 - 对于子目录，设置has_children标记进行懒加载
+            dir_count = 0
+            for dir_name in dirs:
+                dir_node = {"name": dir_name, "children": []}
+                sub_dir_path = os.path.join(dir_path, dir_name)
+                
+                # 计算相对路径
+                rel_path = os.path.relpath(sub_dir_path, self.docs_dir).replace('\\', '/')
+                dir_node["path"] = rel_path
+                dir_node["is_dir"] = True
+                
+                # 检查该目录是否有子项，如果有则设置has_children标记
+                try:
+                    sub_items = os.listdir(sub_dir_path)
+                    # 过滤掉隐藏文件
+                    sub_items = [item for item in sub_items if not item.startswith('.')]
+                    if sub_items:
+                        # 设置标记表示有子内容但未加载
+                        dir_node["has_children"] = True
+                except Exception:
+                    pass
+                
+                # 始终添加目录节点，即使它可能为空
+                parent_node["children"].append(dir_node)
+                dir_count += 1
+            
+            # 对所有节点排序
+            if parent_node["children"]:
+                parent_node["children"] = self._sort_items(parent_node["children"])
+                
+            logging.debug(f"完成构建根目录树 - 添加了 {dir_count} 个目录节点和 {len(files)} 个文件节点")
+            
+        except Exception as e:
+            logging.error(f"处理根目录 {dir_path} 时出错: {str(e)}")
 
     async def get_doc_subtree(self, path: str) -> Dict:
         """获取指定路径的子树，用于按需加载"""

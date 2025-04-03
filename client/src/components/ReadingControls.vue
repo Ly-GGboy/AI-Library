@@ -365,35 +365,82 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// 更新阅读进度
-const updateProgress = () => {
-  // 获取当前文档类型
-  const currentDoc = docStore.currentDoc
-  if (!currentDoc) return
+// 更新阅读进度 - 添加防抖
+let progressUpdateTimer: number | null = null;
 
-  // 根据文档类型使用不同的进度计算方式
-  if (currentDoc.type === 'pdf') {
-    // PDF 文档：使用当前页码和总页数
-    const pdfViewer = document.querySelector('.pdf-viewer')
-    if (pdfViewer) {
-      const currentPage = parseInt(pdfViewer.getAttribute('data-current-page') || '1')
-      const totalPages = parseInt(pdfViewer.getAttribute('data-total-pages') || '1')
-      progress.value = Math.round((currentPage / totalPages) * 100)
-    }
-  } else {
-    // Markdown 文档：使用滚动位置
-    const mainContent = document.querySelector('main')
-    if (!mainContent) return
-    
-    const scrollHeight = mainContent.scrollHeight
-    const clientHeight = mainContent.clientHeight
-    const currentScroll = mainContent.scrollTop
-    const maxScroll = scrollHeight - clientHeight
-    
-    if (maxScroll > 0) {
-      progress.value = Math.round((currentScroll / maxScroll) * 100)
-    }
+const updateProgress = () => {
+  // 防抖处理
+  if (progressUpdateTimer) {
+    window.clearTimeout(progressUpdateTimer);
   }
+  
+  progressUpdateTimer = window.setTimeout(() => {
+    // 获取当前文档类型
+    const currentDoc = docStore.currentDoc
+    if (!currentDoc) return
+  
+    // 在控制台输出DOM结构分析
+    if (isImmersive.value) {
+      console.log('DOM Structure Check:', {
+        main: document.querySelector('main') ? true : false,
+        immersiveClass: document.documentElement.classList.contains('immersive-reading'),
+        markdownBody: document.querySelector('.markdown-body') ? true : false,
+        markdownViewer: document.querySelector('.markdown-viewer') ? true : false,
+      });
+    }
+
+    // 根据文档类型使用不同的进度计算方式
+    if (currentDoc.type === 'pdf') {
+      // PDF 文档：使用当前页码和总页数
+      const pdfViewer = document.querySelector('.pdf-viewer')
+      if (pdfViewer) {
+        const currentPage = parseInt(pdfViewer.getAttribute('data-current-page') || '1')
+        const totalPages = parseInt(pdfViewer.getAttribute('data-total-pages') || '1')
+        progress.value = Math.round((currentPage / totalPages) * 100)
+      }
+    } else {
+      // Markdown 文档：使用滚动位置
+      const mainContent = document.querySelector('main')
+      if (!mainContent) return
+      
+      // 简化逻辑，使用主容器的滚动位置计算
+      const scrollHeight = mainContent.scrollHeight
+      const clientHeight = mainContent.clientHeight
+      const scrollTop = mainContent.scrollTop
+      
+      // 总可滚动距离
+      const scrollableDistance = scrollHeight - clientHeight
+      
+      // 确保没有负值导致的异常计算
+      if (scrollableDistance <= 0) {
+        progress.value = 0
+        return
+      }
+      
+      // 确保滚动位置不超出边界
+      const boundedScrollTop = Math.max(0, Math.min(scrollTop, scrollableDistance))
+      
+      // 计算滚动百分比并确保在 0-100 范围内
+      const percentage = (boundedScrollTop / scrollableDistance) * 100
+      const newProgress = Math.max(0, Math.min(100, Math.round(percentage)))
+      
+      // 仅在进度值变化时更新
+      if (progress.value !== newProgress) {
+        progress.value = newProgress
+      }
+      
+      // 调试信息
+      console.log('Progress calculation (after debounce):', {
+        scrollHeight,
+        clientHeight,
+        scrollTop,
+        boundedScrollTop,
+        scrollableDistance,
+        percentage: percentage.toFixed(2) + '%',
+        progress: progress.value
+      })
+    }
+  }, 50); // 50ms防抖
 }
 
 // 监听自动滚动设置变化
@@ -410,17 +457,39 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('keydown', handleKeydown)
   
-  // 监听文档内容变化和滚动事件
+  // 更详细的滚动事件监听
+  // 1. 监听主内容区域的滚动事件
   const mainContent = document.querySelector('main')
   if (mainContent) {
-    mainContent.addEventListener('scroll', updateProgress)
+    // 移除可能存在的旧监听器，避免重复
+    mainContent.removeEventListener('scroll', updateProgress)
+    // 添加新的监听器
+    mainContent.addEventListener('scroll', updateProgress, { passive: true })
+    console.log('Added scroll listener to main content')
+  } else {
+    console.warn('Main content element not found')
+  }
+  
+  // 2. 监听整个文档的滚动事件
+  window.removeEventListener('scroll', updateProgress)
+  window.addEventListener('scroll', updateProgress, { passive: true })
+  console.log('Added scroll listener to window')
+  
+  // 3. 监听markdown-body内容区域（如果存在）
+  const markdownBody = document.querySelector('.markdown-body')
+  if (markdownBody) {
+    markdownBody.removeEventListener('scroll', updateProgress)
+    markdownBody.addEventListener('scroll', updateProgress, { passive: true })
+    console.log('Added scroll listener to markdown-body')
   }
 
   // 监听 PDF 页面变化事件
   window.addEventListener('pdf-page-changed', updateProgress)
   
-  // 初始化进度
-  updateProgress()
+  // 立即计算初始进度
+  setTimeout(updateProgress, 100)
+  
+  // 初始化显示控制
   startHideTimer()
 
   // 恢复保存的设置
@@ -434,6 +503,17 @@ onMounted(() => {
     
     updateStyles()
   }
+  
+  // 监听沉浸式阅读模式变化
+  watch(() => readingStore.isImmersive, (newValue) => {
+    isImmersive.value = newValue
+    console.log('Immersive mode changed:', newValue)
+    
+    // 当切换到沉浸模式时，重新计算进度
+    if (newValue) {
+      setTimeout(updateProgress, 200)
+    }
+  }, { immediate: true })
 })
 
 // 组件卸载
@@ -441,13 +521,21 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('pdf-page-changed', updateProgress)
+  window.removeEventListener('scroll', updateProgress)
   
+  // 移除所有滚动监听器
   const mainContent = document.querySelector('main')
   if (mainContent) {
     mainContent.removeEventListener('scroll', updateProgress)
   }
   
+  const markdownBody = document.querySelector('.markdown-body')
+  if (markdownBody) {
+    markdownBody.removeEventListener('scroll', updateProgress)
+  }
+  
   if (hideTimeout) clearTimeout(hideTimeout)
+  if (progressUpdateTimer) clearTimeout(progressUpdateTimer)
   stopAutoScroll()
 })
 </script>
@@ -529,7 +617,7 @@ onUnmounted(() => {
   top: 0;
   height: 100%;
   background: rgb(var(--primary-color));
-  transition: width 0.3s ease;
+  transition: width 0.1s linear;
 }
 
 .progress-text {
