@@ -365,30 +365,24 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 }
 
-// 更新阅读进度 - 添加防抖
+// 更新阅读进度 - 使用requestAnimationFrame优化性能
 let progressUpdateTimer: number | null = null;
+let rafId: number | null = null;
+let lastScrollPosition = 0;
+let isUpdatingProgress = false;
 
 const updateProgress = () => {
-  // 防抖处理
-  if (progressUpdateTimer) {
-    window.clearTimeout(progressUpdateTimer);
-  }
+  // 如果已经在请求动画帧中，则不重复请求
+  if (rafId !== null) return;
   
-  progressUpdateTimer = window.setTimeout(() => {
+  // 使用requestAnimationFrame获取最佳性能
+  rafId = requestAnimationFrame(() => {
+    rafId = null;
+    
     // 获取当前文档类型
     const currentDoc = docStore.currentDoc
     if (!currentDoc) return
-  
-    // 在控制台输出DOM结构分析
-    if (isImmersive.value) {
-      console.log('DOM Structure Check:', {
-        main: document.querySelector('main') ? true : false,
-        immersiveClass: document.documentElement.classList.contains('immersive-reading'),
-        markdownBody: document.querySelector('.markdown-body') ? true : false,
-        markdownViewer: document.querySelector('.markdown-viewer') ? true : false,
-      });
-    }
-
+    
     // 根据文档类型使用不同的进度计算方式
     if (currentDoc.type === 'pdf') {
       // PDF 文档：使用当前页码和总页数
@@ -403,44 +397,44 @@ const updateProgress = () => {
       const mainContent = document.querySelector('main')
       if (!mainContent) return
       
-      // 简化逻辑，使用主容器的滚动位置计算
-      const scrollHeight = mainContent.scrollHeight
-      const clientHeight = mainContent.clientHeight
+      // 获取当前滚动位置
       const scrollTop = mainContent.scrollTop
       
-      // 总可滚动距离
-      const scrollableDistance = scrollHeight - clientHeight
+      // 检测滚动变化是否显著 (避免微小抖动)
+      const isSignificantChange = Math.abs(scrollTop - lastScrollPosition) > 1;
       
-      // 确保没有负值导致的异常计算
-      if (scrollableDistance <= 0) {
-        progress.value = 0
-        return
+      // 只有在滚动发生显著变化时才更新进度
+      if (isSignificantChange || !isUpdatingProgress) {
+        // 简化逻辑，使用主容器的滚动位置计算
+        const scrollHeight = mainContent.scrollHeight
+        const clientHeight = mainContent.clientHeight
+        
+        // 总可滚动距离
+        const scrollableDistance = scrollHeight - clientHeight
+        
+        // 确保没有负值导致的异常计算
+        if (scrollableDistance <= 0) {
+          progress.value = 0
+        } else {
+          // 确保滚动位置不超出边界
+          const boundedScrollTop = Math.max(0, Math.min(scrollTop, scrollableDistance))
+          
+          // 计算滚动百分比并确保在 0-100 范围内
+          const percentage = (boundedScrollTop / scrollableDistance) * 100
+          progress.value = Math.max(0, Math.min(100, Math.round(percentage)))
+        }
+        
+        // 保存最近一次滚动位置
+        lastScrollPosition = scrollTop
+        isUpdatingProgress = true;
       }
-      
-      // 确保滚动位置不超出边界
-      const boundedScrollTop = Math.max(0, Math.min(scrollTop, scrollableDistance))
-      
-      // 计算滚动百分比并确保在 0-100 范围内
-      const percentage = (boundedScrollTop / scrollableDistance) * 100
-      const newProgress = Math.max(0, Math.min(100, Math.round(percentage)))
-      
-      // 仅在进度值变化时更新
-      if (progress.value !== newProgress) {
-        progress.value = newProgress
-      }
-      
-      // 调试信息
-      console.log('Progress calculation (after debounce):', {
-        scrollHeight,
-        clientHeight,
-        scrollTop,
-        boundedScrollTop,
-        scrollableDistance,
-        percentage: percentage.toFixed(2) + '%',
-        progress: progress.value
-      })
     }
-  }, 50); // 50ms防抖
+  });
+}
+
+// 节流函数处理频繁的滚动事件
+const throttledScroll = (e: Event) => {
+  updateProgress();
 }
 
 // 监听自动滚动设置变化
@@ -457,37 +451,35 @@ onMounted(() => {
   document.addEventListener('mousemove', handleMouseMove)
   document.addEventListener('keydown', handleKeydown)
   
-  // 更详细的滚动事件监听
+  // 更详细的滚动事件监听，使用passive选项提高性能
   // 1. 监听主内容区域的滚动事件
   const mainContent = document.querySelector('main')
   if (mainContent) {
     // 移除可能存在的旧监听器，避免重复
-    mainContent.removeEventListener('scroll', updateProgress)
-    // 添加新的监听器
-    mainContent.addEventListener('scroll', updateProgress, { passive: true })
+    mainContent.removeEventListener('scroll', throttledScroll)
+    // 添加新的监听器，使用passive选项提高滚动性能
+    mainContent.addEventListener('scroll', throttledScroll, { passive: true })
     console.log('Added scroll listener to main content')
   } else {
     console.warn('Main content element not found')
   }
   
   // 2. 监听整个文档的滚动事件
-  window.removeEventListener('scroll', updateProgress)
-  window.addEventListener('scroll', updateProgress, { passive: true })
-  console.log('Added scroll listener to window')
+  window.removeEventListener('scroll', throttledScroll)
+  window.addEventListener('scroll', throttledScroll, { passive: true })
   
   // 3. 监听markdown-body内容区域（如果存在）
   const markdownBody = document.querySelector('.markdown-body')
   if (markdownBody) {
-    markdownBody.removeEventListener('scroll', updateProgress)
-    markdownBody.addEventListener('scroll', updateProgress, { passive: true })
-    console.log('Added scroll listener to markdown-body')
+    markdownBody.removeEventListener('scroll', throttledScroll)
+    markdownBody.addEventListener('scroll', throttledScroll, { passive: true })
   }
 
   // 监听 PDF 页面变化事件
   window.addEventListener('pdf-page-changed', updateProgress)
   
-  // 立即计算初始进度
-  setTimeout(updateProgress, 100)
+  // 初始进度计算
+  updateProgress()
   
   // 初始化显示控制
   startHideTimer()
@@ -511,7 +503,7 @@ onMounted(() => {
     
     // 当切换到沉浸模式时，重新计算进度
     if (newValue) {
-      setTimeout(updateProgress, 200)
+      updateProgress()
     }
   }, { immediate: true })
 })
@@ -521,17 +513,25 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', handleMouseMove)
   document.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('pdf-page-changed', updateProgress)
-  window.removeEventListener('scroll', updateProgress)
+  
+  // 清理滚动事件监听器
+  window.removeEventListener('scroll', throttledScroll)
   
   // 移除所有滚动监听器
   const mainContent = document.querySelector('main')
   if (mainContent) {
-    mainContent.removeEventListener('scroll', updateProgress)
+    mainContent.removeEventListener('scroll', throttledScroll)
   }
   
   const markdownBody = document.querySelector('.markdown-body')
   if (markdownBody) {
-    markdownBody.removeEventListener('scroll', updateProgress)
+    markdownBody.removeEventListener('scroll', throttledScroll)
+  }
+  
+  // 清理requestAnimationFrame
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
   }
   
   if (hideTimeout) clearTimeout(hideTimeout)
